@@ -80,7 +80,7 @@ end
 var add := func(a, b) => a + b
 
 // Function with body
-var factorial := func(n)
+var factorial := func(n) is
     if n <= 1 => 1
     else => n * factorial(n - 1)
 end
