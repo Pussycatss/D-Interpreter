@@ -20,7 +20,7 @@ public class Lexer {
         this.source = source;
     }
 
-    public List<Token> tokenize(String source) {
+    public static List<Token> tokenize(String source) {
         return new Lexer(source).tokenize();
     }
 
@@ -59,6 +59,10 @@ public class Lexer {
 
             case '<' -> addToken(match('=') ? TokenType.LESS_EQUAL : TokenType.LESS);
             case '>' -> addToken(match('=') ? TokenType.GREATER_EQUAL : TokenType.GREATER);
+            case '=' -> {
+                if (match('>')) addToken(TokenType.ARROW);
+                else            addToken(TokenType.EQUAL);
+            }
 
             case '.' -> addToken(match('.') ? TokenType.RANGE : TokenType.DOT);
 
