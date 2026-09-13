@@ -139,7 +139,7 @@ class LexerTest {
 
     @Test void slashSlashInsideStringIsNotAComment() {
         assertEquals("a // b",
-                Lexer.tokenize("\"a // b\"").get(0).literal());
+                Lexer.tokenize("\"a // b\"").getFirst().literal());
     }
 
     @Test void positionsOnSingleLine() {
