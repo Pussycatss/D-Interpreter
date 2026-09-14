@@ -25,7 +25,7 @@ public abstract class InterpreterException extends RuntimeException {
     }
 
     public InterpreterException(String message, String source, int line, int column) {
-        this(message, source, "<string>", line, column);
+        this(message, source, "<unknown>", line, column);
     }
 
     public String getSource() {
