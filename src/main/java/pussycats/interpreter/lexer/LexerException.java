@@ -3,8 +3,14 @@ package pussycats.interpreter.lexer;
 import pussycats.interpreter.InterpreterException;
 
 /**
- * Thrown when the lexer encounters text that cannot be turned into a token
- * TODO: ENUMERATE POSSIBLE ERRORS
+ * Thrown when the lexer encounters text that cannot be turned into a token. Error type is "SyntaxError".
+ *
+ * <p>Represents one of the following errors:
+ * <ul>
+ *   <li>Unterminated string literal
+ *   <li>Unterminated escape sequence
+ *   <li>Unexpected character
+ * </ul>
  */
 public final class LexerException extends InterpreterException {
 
