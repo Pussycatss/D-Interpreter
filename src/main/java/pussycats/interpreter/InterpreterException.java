@@ -5,6 +5,7 @@ import java.util.List;
 
 /**
  * Base exception class for all errors.
+ * <p>
  * Provides source code context and error formatting.
  */
 public abstract class InterpreterException extends RuntimeException {

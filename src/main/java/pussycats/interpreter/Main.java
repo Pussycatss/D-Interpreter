@@ -10,14 +10,16 @@ import java.util.List;
 
 /**
  * Entry point of the D interpreter.
- * <i><p><b>NOT FINISHED</b>
- *
- * <p>SUPPORTED LANGUAGE FEATURES:
+ * <p>
+ * <i><b>NOT FINISHED</b></i>
+ * <p>
+ * SUPPORTED LANGUAGE FEATURES:
  * <ul>
- *   <li>Lexical analysis (tokenization)</li>
+ *   <li>Lexical analysis (tokenization)
  * </ul>
  * </i>
- * <p>Usage:
+ * <p>
+ * Usage:
  * <pre>
  *   # Run a script file
  *   java pussycats.interpreter.Main script.d

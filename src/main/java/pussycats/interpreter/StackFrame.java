@@ -2,6 +2,7 @@ package pussycats.interpreter;
 
 /**
  * Represents a single frame in the interpreter's call stack.
+ * <p>
  * Stores information about where in the source code execution is currently located.
  */
 public record StackFrame(

@@ -6,11 +6,11 @@ import java.util.List;
 
 /**
  * Lexical analyzer.
- *
- * <p>Performs lexical analysis (tokenization) on the source code. Detects simple syntax errors
+ * <p>
+ * Performs lexical analysis (tokenization) on the source code. Detects simple syntax errors
  * (see {@link LexerException}).
- *
- * <p>Usage:
+ * <p>
+ * Usage:
  * <pre>{@code
  *   Lexer lexer = new Lexer(sourceCode);
  *   List<Token> tokens = lexer.scan();
