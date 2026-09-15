@@ -69,7 +69,7 @@ public final class Lexer {
 
             case '+': addToken(TokenType.PLUS); break;
             case '-': addToken(TokenType.MINUS); break;
-            case '*': addToken(TokenType.STAR); break;
+            case '*': addToken(TokenType.ASTERISK); break;
 
             case '/':
                 if (match('/')) {

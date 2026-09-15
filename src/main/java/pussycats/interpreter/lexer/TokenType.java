@@ -47,7 +47,7 @@ public enum TokenType {
     // Operators
     PLUS,
     MINUS,
-    STAR,
+    ASTERISK,
     SLASH,
 
     LESS,
