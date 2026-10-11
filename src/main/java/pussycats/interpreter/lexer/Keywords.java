@@ -1,6 +1,8 @@
 package pussycats.interpreter.lexer;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,6 +49,10 @@ public final class Keywords {
     }
 
     private Keywords() {
+    }
+
+    public static List<String> getKeywords() {
+        return new ArrayList<>(KEYWORDS.keySet());
     }
 
     /** Returns the keyword TokenType for {@code text}, or {@code null} if it's not a keyword. */
