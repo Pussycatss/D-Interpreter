@@ -80,7 +80,7 @@ end
 var add := func(a, b) => a + b
 
 // Function with body
-var factorial := func(n)
+var factorial := func(n) is
     if n <= 1 => 1
     else => n * factorial(n - 1)
 end
@@ -133,7 +133,53 @@ print x, y, z  // multiple values
 ## Project Structure
 
 - `docs/`: Project documentation and specification
-- `src/`: Source code (to be implemented)
+- `src/main/java/`: Main source code
+- `src/test/java/`: JUnit test sources
+- `pom.xml`: Maven build file
+
+## Testing
+
+The project uses **JUnit 5** for unit and integration tests. Tests live under
+`src/test/java/` and mirror the package structure of the main sources.
+
+### Test layout
+
+- `pussycats.interpreter.lexer.*` — tests for the lexer (token kinds, literals,
+  line/column tracking, error cases such as unterminated strings).
+- `pussycats.interpreter.parser.*` — tests for the parser (AST shape, precedence,
+  associativity, syntax errors).
+- `pussycats.interpreter.interpreter.*` — tests for evaluation semantics
+  (arithmetic, control flow, functions, arrays/tuples, dynamic typing).
+- `pussycats.interpreter.sources.*` — examples of code in D language.
+- `pussycats.interpreter.*` — end-to-end tests that tokenize, parse, and
+  evaluate a source snippet and compare the printed output.
+
+### Running the tests
+
+**All tests**
+
+With Maven:
+
+```bash
+mvn test
+```
+
+**A single test class**
+
+```bash
+mvn -Dtest=LexerTest test
+```
+
+**A single test method**
+
+```bash
+mvn -Dtest=LexerTest#twoCharacterOperators test
+```
+
+**From an IDE**
+
+In IntelliJ IDEA or Eclipse, right-click the `src/test/java` folder and choose
+*Run 'All Tests'* (or use the green gutter icon next to a test class or method).
 
 ## Documentation
 
