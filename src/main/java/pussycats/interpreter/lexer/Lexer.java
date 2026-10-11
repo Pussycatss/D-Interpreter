@@ -4,31 +4,42 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Lexer {
+/**
+ * Lexical analyzer.
+ * <p>
+ * Performs lexical analysis (tokenization) on the source code. Detects simple syntax errors
+ * (see {@link LexerException}).
+ * <p>
+ * Usage:
+ * <pre>{@code
+ *   Lexer lexer = new Lexer(sourceCode);
+ *   List<Token> tokens = lexer.scan();
+ * }</pre>
+ */
+public final class Lexer {
     private final String source;
+    private final String sourceName;
     private final List<Token> tokens = new ArrayList<>();
 
     private int start = 0;
     private int current = 0;
     private int line = 1;
     private int column = 1;
+    private int startTokenColumn = 1;
 
-    private int tokenLine;
-    private int tokenColumn;
+    public Lexer(String source, String sourceName) {
+        this.source = source;
+        this.sourceName = sourceName;
+    }
 
     public Lexer(String source) {
-        this.source = source;
+        this(source, "<unknown>");
     }
 
-    public static List<Token> tokenize(String source) {
-        return new Lexer(source).tokenize();
-    }
-
-    public List<Token> tokenize() {
-        while (!isAtEnd()) {
+    public List<Token> scan() {
+        while (!isAtEOF()) {
             start = current;
-            tokenLine = line;
-            tokenColumn = column;
+            startTokenColumn = column;
             scanToken();
         }
         tokens.add(new Token(TokenType.EOF, "", null, line, column));
@@ -37,8 +48,13 @@ public class Lexer {
 
     private void scanToken() {
         char c = advance();
-
         switch (c) {
+            case ' ', '\t', '\r' -> {
+                // whitespace
+            }
+
+            case '\n' -> addLineBreak();
+
             case '(' -> addToken(TokenType.LPAREN);
             case ')' -> addToken(TokenType.RPAREN);
             case '[' -> addToken(TokenType.LBRACKET);
@@ -52,102 +68,66 @@ public class Lexer {
             case '-' -> addToken(TokenType.MINUS);
             case '*' -> addToken(TokenType.STAR);
 
-            case ':' -> {
-                if (match('=')) addToken(TokenType.ASSIGN);
-                else throw error("Unexpected  ':' (expected ':=')" );
-            }
-
-            case '<' -> addToken(match('=') ? TokenType.LESS_EQUAL : TokenType.LESS);
-            case '>' -> addToken(match('=') ? TokenType.GREATER_EQUAL : TokenType.GREATER);
-            case '=' -> {
-                if (match('>')) addToken(TokenType.ARROW);
-                else            addToken(TokenType.EQUAL);
-            }
-
-            case '.' -> addToken(match('.') ? TokenType.RANGE : TokenType.DOT);
-
             case '/' -> {
                 if (match('/')) {
-                    while (!isAtEnd() && peek() != '\n' && peek() != 'r') advance();
-                } else if (match('=')) {
-                    addToken(TokenType.NOT_EQUAL);
+                    skipLineComment();
                 } else {
                     addToken(TokenType.SLASH);
                 }
             }
 
-            case '"', '\'' -> string(c);
-
-            case '\n' -> addToken(TokenType.NEWLINE);
-
-            case '\r' -> {
-                if (peek() == '\n') {
-                    advance();
+            case '.' -> {
+                if (match('.')) {
+                    addToken(TokenType.RANGE);
                 } else {
-                    line++;
-                    column = 1;
+                    addToken(TokenType.DOT);
                 }
-                addToken(TokenType.NEWLINE);
             }
 
-            case ' ', '\t', '\f' -> { }
+            case ':' -> {
+                if (match('=')) {
+                    addToken(TokenType.ASSIGN);
+                } else {
+                    throw error("Expected '=' after ':'");
+                }
+            }
+
+            case '=' -> {
+                if (match('>')) {
+                    addToken(TokenType.ARROW);
+                } else {
+                    addToken(TokenType.EQUAL);
+                }
+            }
+
+            case '<' -> addToken(match('=') ? TokenType.LESS_EQUAL : TokenType.LESS);
+
+            case '>' -> addToken(match('=') ? TokenType.GREATER_EQUAL : TokenType.GREATER);
 
             default -> {
-                if (isDigit(c)) {
-                    number();
+                if (c == '\'' || c == '"') {
+                    scanString(c);
+                } else if (isDigit(c)) {
+                    scanNumber();
                 } else if (isAlpha(c)) {
-                    identifier();
+                    scanIdentifierOrKeyword();
                 } else {
                     throw error("Unexpected character '" + c + "'");
                 }
             }
-
         }
     }
 
-    private void string(char quote) {
-        StringBuilder sb = new StringBuilder();
-
-        while (!isAtEnd()) {
-            char c = peek();
-
-            if (c == quote) {
-                advance();
-                addToken(TokenType.STRING, sb.toString());
-                return;
-            }
-            if (c == '\n' || c == '\r') {
-                throw error("Unterminated string literal");
-            }
-            if (c == '\\') {
-                advance();
-                if (isAtEnd()) throw error("Unterminated escape sequence");
-                char esc = advance();
-                switch (esc) {
-                    case 'n' -> sb.append('\n');
-                    case 't' -> sb.append('\t');
-                    case 'r' -> sb.append('\r');
-                    case '0' -> sb.append('\0');
-                    case '\\' -> sb.append('\\');
-                    case '"' -> sb.append('"');
-                    case '\'' -> sb.append('\'');
-                    default -> throw error("Unknown escape sequence: \\" + esc);
-                }
-            } else {
-                sb.append(advance());
-            }
+    private void scanNumber() {
+        while (isDigit(peek())) {
+            advance();
         }
-        throw error("Unterminated string literal");
-    }
-
-    private void number() {
-        while (isDigit(peek())) advance();
 
         boolean isReal = false;
         if (peek() == '.' && isDigit(peekNext())) {
-            isReal = true;
-            advance();
-            while (isDigit(peek())) advance();
+            isReal = true; // is real 🥀🥀😭✌️
+            do advance();
+            while (isDigit(peek()));
         }
 
         String text = source.substring(start, current);
@@ -158,69 +138,95 @@ public class Lexer {
         }
     }
 
-    private void identifier() {
-        while (isAlphaNumeric(peek())) advance();
+    private void scanString(char quote) {
+        StringBuilder value = new StringBuilder();
+        while (peek() != quote) {
+            if (isAtEOF() || peek() == '\n') {
+                throw error("Unterminated string literal");
+            }
+            char c = advance();
+            if (c == '\\') {
+                value.append(scanEscape());
+            } else {
+                value.append(c);
+            }
+        }
+        advance(); // consume closing quote!
+        addToken(TokenType.STRING, value.toString());
+    }
 
+    private char scanEscape() {
+        if (isAtEOF()) {
+            throw error("Unterminated escape sequence");
+        }
+        char c = advance();
+        return switch (c) {
+            case 'n' -> '\n';
+            case 't' -> '\t';
+            case 'r' -> '\r';
+            case '\\' -> '\\';
+            case '\'' -> '\'';
+            case '"' -> '"';
+            default -> throw error("Unknown escape sequence '\\" + c + "'");
+        };
+    }
+
+    private void scanIdentifierOrKeyword() {
+        while (isAlphaNumeric(peek())) {
+            advance();
+        }
         String text = source.substring(start, current);
-        TokenType type = Keywords.lookup(text);
+        TokenType keyword = Keywords.lookup(text);
+        addToken(keyword != null ? keyword : TokenType.IDENTIFIER);
+    }
 
-        if (type == null) {
-            addToken(TokenType.IDENTIFIER);
-        } else if (type == TokenType.TRUE) {
-            addToken(TokenType.TRUE, Boolean.TRUE);
-        } else if (type == TokenType.FALSE) {
-            addToken(TokenType.FALSE, Boolean.FALSE);
-        } else {
-            addToken(type);
+    private void skipLineComment() {
+        while (peek() != '\n' && !isAtEOF()) {
+            advance();
         }
     }
 
-    private boolean isAtEnd() {
+    private void addLineBreak() {
+        boolean lastWasNewline = !tokens.isEmpty() && tokens.getLast().type() == TokenType.NEWLINE;
+        line++;
+        column = 1;
+        if (!lastWasNewline) {
+            tokens.add(new Token(TokenType.NEWLINE, "\\n", null, line - 1, startTokenColumn));
+        }
+    }
+
+    private boolean isAtEOF() {
         return current >= source.length();
     }
 
     private char advance() {
-        char c = source.charAt(current++);
-        if (c == '\n') {
-            line++;
-            column = 1;
-        } else {
-            column++;
-        }
+        char c = source.charAt(current);
+        current++;
+        column++;
         return c;
     }
 
-    private void addToken(TokenType type) {
-        addToken(type, null);
-    }
-
-    private void addToken(TokenType type, Object literal) {
-        String text = source.substring(start, current);
-        tokens.add(new Token(type, text, literal, tokenLine, tokenColumn));
-    }
-
-    private boolean match(char expected) {
-        if (isAtEnd() || source.charAt(current) != expected) return false;
-        current++;
-        if (expected == '\n') {
-            line++;
-            column = 1;
-        } else {
-            column++;
+    private boolean match(char expect) {
+        if (isAtEOF() || source.charAt(current) != expect) {
+            return false;
         }
+        current++;
+        column++;
         return true;
     }
 
-    private LexerException error(String message) {
-        return new LexerException(message, tokenLine, tokenColumn);
-    }
-
     private char peek() {
-        return isAtEnd() ? '\0' : source.charAt(current);
+        if (isAtEOF()) {
+            return '\0';
+        }
+        return source.charAt(current);
     }
 
     private char peekNext() {
-        return current + 1 >= source.length() ? '\0' : source.charAt(current + 1);
+        if (current + 1 >= source.length()) {
+            return '\0';
+        }
+        return source.charAt(current + 1);
     }
 
     private static boolean isDigit(char c) {
@@ -228,10 +234,23 @@ public class Lexer {
     }
 
     private static boolean isAlpha(char c) {
-        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        return c == '_' || Character.isLetter(c);
     }
 
     private static boolean isAlphaNumeric(char c) {
         return isAlpha(c) || isDigit(c);
+    }
+
+    private void addToken(TokenType type) {
+        addToken(type, null);
+    }
+
+    private void addToken(TokenType type, Object literal) {
+        String lexeme = source.substring(start, current);
+        tokens.add(new Token(type, lexeme, literal, line, startTokenColumn));
+    }
+
+    private LexerException error(String message) {
+        return new LexerException(message, source, sourceName, line, startTokenColumn);
     }
 }

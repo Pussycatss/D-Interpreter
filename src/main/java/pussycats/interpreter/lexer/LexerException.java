@@ -1,26 +1,29 @@
 package pussycats.interpreter.lexer;
 
+import pussycats.interpreter.InterpreterException;
+
 /**
- * Custom exception.
- *
- * <p>Thrown when the lexer encounters invalid input.</p>
+ * Thrown when the lexer encounters text that cannot be turned into a token. Error type is "SyntaxError".
+ * <p>
+ * Represents one of the following errors:
+ * <ul>
+ *   <li>Unterminated string literal
+ *   <li>Unterminated escape sequence
+ *   <li>Unexpected character
+ * </ul>
  */
-public class LexerException extends RuntimeException {
+public final class LexerException extends InterpreterException {
 
-    private final int line;
-    private final int column;
-
-    public LexerException(String message, int line, int column) {
-        super("Lex error at " + line + ":" + column + " —— " + message);
-        this.line = line;
-        this.column = column;
+    public LexerException(String message, String source, int line, int column) {
+        super(message, source, line, column);
     }
 
-    public int getLine() {
-        return line;
+    public LexerException(String message, String source, String filename, int line, int column) {
+        super(message, source, filename, line, column);
     }
 
-    public int getColumn() {
-        return column;
+    @Override
+    protected String getErrorType() {
+        return "SyntaxError";
     }
 }

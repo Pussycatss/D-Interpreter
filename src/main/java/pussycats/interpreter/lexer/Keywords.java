@@ -5,8 +5,8 @@ import java.util.Map;
 
 /**
  * Static map of reserved words.
- *
- * <p>Contains all keywords and their mapping to {@link TokenType}.</p>
+ * <p>
+ * Contains all keywords and their mapping to {@link TokenType}.
  */
 final class Keywords {
     private static final Map<String, TokenType> KEYWORDS = new HashMap<>();

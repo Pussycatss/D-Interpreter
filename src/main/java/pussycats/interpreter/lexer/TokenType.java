@@ -2,8 +2,8 @@ package pussycats.interpreter.lexer;
 
 /**
  * Token types.
- *
- * <p>Represents enumeration of all possible token types</p>
+ * <p>
+ * Represents enumeration of all possible token types
  */
 public enum TokenType {
     // Literals
