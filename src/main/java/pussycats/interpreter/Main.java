@@ -1,5 +1,6 @@
 package pussycats.interpreter;
 
+import pussycats.interpreter.cli.REPL;
 import pussycats.interpreter.lexer.Lexer;
 import pussycats.interpreter.lexer.Token;
 
@@ -38,8 +39,7 @@ public final class Main {
 
     static void main(String[] args) {
         if (args.length == 0) {
-            System.out.println("REPL not implemented.");
-            System.out.println("Usage: java pussycats.interpreter.Main [options] [file]");
+            new REPL("lexer");
             System.exit(EXIT_OK);
             return;
         }
