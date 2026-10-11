@@ -6,6 +6,8 @@ Proposed architecture:
 interpreter/
 │
 ├── Main.java
+├── StackFrame.java
+├── InterpreterException.java
 │
 ├── lexer/
 │   ├── Lexer.java
