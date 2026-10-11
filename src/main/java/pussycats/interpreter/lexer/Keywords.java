@@ -8,7 +8,7 @@ import java.util.Map;
  * <p>
  * Contains all keywords and their mapping to {@link TokenType}.
  */
-final class Keywords {
+public final class Keywords {
     private static final Map<String, TokenType> KEYWORDS = new HashMap<>();
 
     static {
