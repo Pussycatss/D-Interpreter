@@ -10,29 +10,29 @@ class LexerErrorTest {
 
     @Test void unterminatedString() {
         LexerException e = assertThrows(LexerException.class,
-                () -> Lexer.tokenize("\"hello"));
+                () -> Lexer.scan("\"hello"));
         assertTrue(e.getMessage().contains("Unterminated string"));
     }
 
     @Test void newlineInsideStringIsAnError() {
-        assertThrows(LexerException.class, () -> Lexer.tokenize("\"a\nb\""));
+        assertThrows(LexerException.class, () -> Lexer.scan("\"a\nb\""));
     }
 
     @Test void unknownCharacter() {
         LexerException e = assertThrows(LexerException.class,
-                () -> Lexer.tokenize("a @ b"));
+                () -> Lexer.scan("a @ b"));
         assertTrue(e.getMessage().contains("@"));
     }
 
     @Test void colonWithoutEquals() {
         LexerException e = assertThrows(LexerException.class,
-                () -> Lexer.tokenize("x : y"));
+                () -> Lexer.scan("x : y"));
         assertTrue(e.getMessage().contains(":="));
     }
 
     @Test void errorReportsLineAndColumn() {
         LexerException e = assertThrows(LexerException.class,
-                () -> Lexer.tokenize("abc\n  @"));
+                () -> Lexer.scan("abc\n  @"));
         assertEquals(2, e.getLine());
         assertEquals(3, e.getColumn());
     }

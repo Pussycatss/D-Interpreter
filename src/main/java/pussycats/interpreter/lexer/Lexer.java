@@ -36,6 +36,10 @@ public final class Lexer {
         this(source, "<unknown>");
     }
 
+    public static List<Token> scan(String source) {
+        return new Lexer(source).scan();
+    }
+
     public List<Token> scan() {
         while (!isAtEOF()) {
             start = current;
@@ -49,11 +53,16 @@ public final class Lexer {
     private void scanToken() {
         char c = advance();
         switch (c) {
-            case ' ', '\t', '\r' -> {
-                // whitespace
-            }
+            case ' ', '\t', '\f' -> { }
 
             case '\n' -> addLineBreak();
+
+            case '\r' -> {
+                if (peek() == '\n') {
+                    advance();
+                }
+                addLineBreak();
+            }
 
             case '(' -> addToken(TokenType.LPAREN);
             case ')' -> addToken(TokenType.RPAREN);
@@ -71,6 +80,8 @@ public final class Lexer {
             case '/' -> {
                 if (match('/')) {
                     skipLineComment();
+                } else if (match('=')) {
+                    addToken(TokenType.NOT_EQUAL);
                 } else {
                     addToken(TokenType.SLASH);
                 }
@@ -88,7 +99,7 @@ public final class Lexer {
                 if (match('=')) {
                     addToken(TokenType.ASSIGN);
                 } else {
-                    throw error("Expected '=' after ':'");
+                    throw error("Unexpected ':' (expected ':=')");
                 }
             }
 
@@ -164,6 +175,7 @@ public final class Lexer {
             case 'n' -> '\n';
             case 't' -> '\t';
             case 'r' -> '\r';
+            case '0' -> '\0';
             case '\\' -> '\\';
             case '\'' -> '\'';
             case '"' -> '"';
@@ -177,7 +189,15 @@ public final class Lexer {
         }
         String text = source.substring(start, current);
         TokenType keyword = Keywords.lookup(text);
-        addToken(keyword != null ? keyword : TokenType.IDENTIFIER);
+        if (keyword == null) {
+            addToken(TokenType.IDENTIFIER);
+        } else if (keyword == TokenType.TRUE) {
+            addToken(TokenType.TRUE, Boolean.TRUE);
+        } else if (keyword == TokenType.FALSE) {
+            addToken(TokenType.FALSE, Boolean.FALSE);
+        } else {
+            addToken(keyword);
+        }
     }
 
     private void skipLineComment() {
@@ -187,12 +207,9 @@ public final class Lexer {
     }
 
     private void addLineBreak() {
-        boolean lastWasNewline = !tokens.isEmpty() && tokens.getLast().type() == TokenType.NEWLINE;
         line++;
         column = 1;
-        if (!lastWasNewline) {
-            tokens.add(new Token(TokenType.NEWLINE, "\\n", null, line - 1, startTokenColumn));
-        }
+        tokens.add(new Token(TokenType.NEWLINE, "\\n", null, line - 1, startTokenColumn));
     }
 
     private boolean isAtEOF() {

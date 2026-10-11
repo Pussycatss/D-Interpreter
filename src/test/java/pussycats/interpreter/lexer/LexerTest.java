@@ -12,7 +12,7 @@ class LexerTest {
 
     /** Token types of {@code src}, without the trailing EOF. */
     private static List<TokenType> types(String src) {
-        List<Token> tokens = Lexer.tokenize(src);
+        List<Token> tokens = Lexer.scan(src);
         return tokens.subList(0, tokens.size() - 1)
                 .stream()
                 .map(Token::type)
@@ -20,7 +20,7 @@ class LexerTest {
     }
 
     @Test void emptySourceProducesOnlyEof() {
-        List<Token> tokens = Lexer.tokenize("");
+        List<Token> tokens = Lexer.scan("");
         assertEquals(1, tokens.size());
         assertEquals(TokenType.EOF, tokens.getFirst().type());
     }
@@ -40,7 +40,7 @@ class LexerTest {
     }
 
     @Test void booleanAndNoneLiterals() {
-        List<Token> ts = Lexer.tokenize("true false none");
+        List<Token> ts = Lexer.scan("true false none");
         assertEquals(TokenType.TRUE,  ts.get(0).type());
         assertEquals(Boolean.TRUE,    ts.get(0).literal());
         assertEquals(TokenType.FALSE, ts.get(1).type());
@@ -62,13 +62,13 @@ class LexerTest {
     }
 
     @Test void integerLiteral() {
-        List<Token> ts = Lexer.tokenize("42");
+        List<Token> ts = Lexer.scan("42");
         assertEquals(TokenType.INTEGER, ts.getFirst().type());
         assertEquals(new BigInteger("42"), ts.getFirst().literal());
     }
 
     @Test void realLiteral() {
-        List<Token> ts = Lexer.tokenize("3.14");
+        List<Token> ts = Lexer.scan("3.14");
         assertEquals(TokenType.REAL, ts.getFirst().type());
         assertEquals(3.14, (Double) ts.getFirst().literal(), 1e-9);
     }
@@ -139,11 +139,11 @@ class LexerTest {
 
     @Test void slashSlashInsideStringIsNotAComment() {
         assertEquals("a // b",
-                Lexer.tokenize("\"a // b\"").getFirst().literal());
+                Lexer.scan("\"a // b\"").getFirst().literal());
     }
 
     @Test void positionsOnSingleLine() {
-        List<Token> ts = Lexer.tokenize("var x");
+        List<Token> ts = Lexer.scan("var x");
         assertEquals(1, ts.get(0).line());
         assertEquals(1, ts.get(0).column());
         assertEquals(1, ts.get(1).line());
@@ -151,7 +151,7 @@ class LexerTest {
     }
 
     @Test void positionsAcrossLines() {
-        List<Token> ts = Lexer.tokenize("a\nb");
+        List<Token> ts = Lexer.scan("a\nb");
         assertEquals(1, ts.get(0).line());
         assertEquals(1, ts.get(0).column());
 
@@ -163,7 +163,7 @@ class LexerTest {
     }
 
     @Test void eofPositionIsAfterLastToken() {
-        Token eof = Lexer.tokenize("ab").get(1);
+        Token eof = Lexer.scan("ab").get(1);
         assertEquals(TokenType.EOF, eof.type());
         assertEquals(1, eof.line());
         assertEquals(3, eof.column());
