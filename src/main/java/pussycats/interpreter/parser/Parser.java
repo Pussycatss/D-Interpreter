@@ -31,6 +31,14 @@ public final class Parser {
         this.reporter = new ErrorReporter(source, filename);
     }
 
+    public boolean hasErrors() {
+        return reporter.hasErrors();
+    }
+
+    public String formatErrors() {
+        return reporter.formatAll();
+    }
+
     public Node parse() {
         try {
             return parseProgram();
