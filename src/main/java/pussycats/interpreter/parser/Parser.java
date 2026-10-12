@@ -41,7 +41,8 @@ public final class Parser {
 
     public Node parse() {
         try {
-            return parseProgram();
+            Node ast = parseProgram();
+            return hasErrors() ? null : ast;
         } catch (ParsePanic ignored) {
             return null;
         }
@@ -51,10 +52,14 @@ public final class Parser {
         List<Statement> statements = new ArrayList<>();
         skipSeparators();
         while (!isAtEnd()) {
-            statements.add(parseStatement());
-            if (!isAtEnd()) {
-                requireStatementSeparator();
-                skipSeparators();
+            try {
+                statements.add(parseStatement());
+                if (!isAtEnd()) {
+                    requireStatementSeparator();
+                    skipSeparators();
+                }
+            } catch (ParsePanic ignored) {
+                synchronize();
             }
         }
         return new Statement.Block(statements);
@@ -82,6 +87,12 @@ public final class Parser {
         if (match(TokenType.FOR))    return parseFor();
         if (match(TokenType.EXIT))   return parseExit();
         if (match(TokenType.RETURN)) return parseReturn();
+        if (isAtStatementBoundary()) {
+            throw panic(peek(),
+                    "Expected a statement",
+                    "this position needs a statement: try 'print', 'var', "
+                            + "'if', 'loop', 'for', or an expression");
+        }
         return parseAssignOrExpressionStatement();
     }
 
@@ -89,7 +100,14 @@ public final class Parser {
         List<Statement.VarDecl> decls = new ArrayList<>();
         do {
             Token name = consume(TokenType.IDENTIFIER, "Expected a variable name after 'var'");
-            Expression init = match(TokenType.ASSIGN) ? parseExpression() : null;
+            Expression init = null;
+            if (match(TokenType.ASSIGN)) {
+                init = parseExpression();
+            } else if (check(TokenType.EQUAL)) {
+                throw panic(peek(),
+                        "Expected ':=' after variable name",
+                        "did you mean ':=' instead of '='?");
+            }
             decls.add(new Statement.VarDecl(name.lexeme(), init));
         } while (match(TokenType.COMMA));
         return decls.size() == 1 ? decls.getFirst() : new Statement.VarDeclGroup(decls);
@@ -103,7 +121,6 @@ public final class Parser {
     }
 
     private Statement parseAssignOrExpressionStatement() {
-        Token start = peek();
         Expression expr = parseExpression();
         if (match(TokenType.ASSIGN)) {
             Expression value = parseExpression();
@@ -332,8 +349,9 @@ public final class Parser {
             return new Expression.Ident(previous().lexeme());
         }
         if (match(TokenType.LPAREN)) {
+            Token open = previous();
             Expression inner = parseExpression();
-            consume(TokenType.RPAREN, "Expected ')' to close argument list");
+            closeDelimiter(TokenType.RPAREN, open, ")", "parenthesized expression");
             return inner;
         }
         if (match(TokenType.LBRACKET)) {
@@ -369,6 +387,9 @@ public final class Parser {
                     String name = advance().lexeme();
                     advance();
                     entries.add(new Expression.TupleEntry(name, parseExpression()));
+                } else if (check(TokenType.IDENTIFIER) && peekAt(1).type() == TokenType.EQUAL) {
+                    throw panic(peekAt(1), "Expected ':=' after tuple element name",
+                                                "did you mean ':=' instead of '='?");
                 } else {
                     entries.add(new Expression.TupleEntry(null, parseExpression()));
                 }
@@ -380,6 +401,7 @@ public final class Parser {
 
     private Expression parseFuncLit() {
         List<String> params = new ArrayList<>();
+        Token funcTok = previous();
         if (match(TokenType.LPAREN)) {
             if (!check(TokenType.RPAREN)) {
                 params.add(consume(TokenType.IDENTIFIER, "Expected parameter name").lexeme());
@@ -395,10 +417,13 @@ public final class Parser {
         }
         if (match(TokenType.IS)) {
             Statement.Block body = new Statement.Block(parseBody());
-            consumeEnd("func", previous());
+            consumeEnd("func", funcTok);
             return new Expression.FuncLit(params, body, true);
         }
-        throw error(peek(), "Expected '=>' or 'is' in function literal");
+        throw panic(peek(),
+                "Expected '=>' or 'is' in function literal",
+                "the 'func' at line " + funcTok.line()
+                        + " needs a body: either '=> expr' or 'is ... end'");
     }
 
     private TypeIndicator parseTypeIndicator() {
@@ -428,7 +453,25 @@ public final class Parser {
             consume(TokenType.RBRACE, "Expected '}' after '{' in type indicator");
             return TypeIndicator.TUPLE;
         }
-        throw error(peek(), "Expected a type indicator (int, real, bool, string, none, [], {}, func)");
+        throw panic(peek(),
+                "Expected a type indicator (int, real, bool, string, none, [], {}, func)",
+                suggestType(peek()));
+    }
+
+    private void closeDelimiter(TokenType expected, Token openTok, String closer, String what) {
+        if (match(expected)) return;
+        Token got = peek();
+        throw panic(got, "Expected '" + closer + "' to close " + what + " opened at line " + openTok.line(),
+                closer.equals(")") ? "check for a missing ')' in the expression"
+                                   : "check for a missing '" + closer + "' before this point");
+    }
+
+    private static final List<String> TYPE_KEYWORDS = List.of("int", "real", "bool", "string", "none", "func");
+
+    private String suggestType(Token got) {
+        if (got.type() != TokenType.IDENTIFIER) return null;
+        String close = closestIn(got.lexeme(), TYPE_KEYWORDS);
+        return close == null ? null : "did you mean '" + close + "'?";
     }
 
     private void requireStatementSeparator(TokenType... terminators) {
@@ -493,7 +536,7 @@ public final class Parser {
     private Token peekAt(int offset) {
         int idx = current + offset;
         if (idx >= tokens.size()) {
-            return tokens.get(tokens.size() - 1); // EOF
+            return tokens.getLast(); // EOF
         }
         return tokens.get(idx);
     }
@@ -612,21 +655,25 @@ public final class Parser {
         return null;
     }
 
-    private static String findClosestKeyword(String text) {
-        String best = null;
-        int bestDistance = 3; // distances >= 3 are treated as "not close enough"
+    private static String closestIn(String text, Iterable<String> candidates) {
         String lower = text.toLowerCase();
-        for (String kw : Keywords.getKeywords()) {
-            if (kw.equals(lower)) {
-                continue; // exact match isn't a typo
+        String best = null;
+        int bestDistance = 3;
+        for (String candidate : candidates) {
+            if (candidate.equals(lower)) {
+                continue;
             }
-            int d = levenshtein(lower, kw);
+            int d = levenshtein(lower, candidate);
             if (d < bestDistance) {
                 bestDistance = d;
-                best = kw;
+                best = candidate;
             }
         }
         return best;
+    }
+
+    private static String findClosestKeyword(String text) {
+        return closestIn(text, Keywords.getKeywords());
     }
 
     private static int levenshtein(String a, String b) {
