@@ -1,8 +1,11 @@
 package pussycats.interpreter;
 
+import pussycats.interpreter.ast.AstPrinter;
+import pussycats.interpreter.ast.Node;
 import pussycats.interpreter.cli.REPL;
 import pussycats.interpreter.lexer.Lexer;
 import pussycats.interpreter.lexer.Token;
+import pussycats.interpreter.parser.Parser;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -87,7 +90,13 @@ public final class Main {
             System.out.println(token);
         }
 
-        // TODO: once a parser exists, feed `tokens` into it here and print/execute
+        Parser parser = new Parser(tokens, source, sourceName);
+        Node ast = parser.parse();
+        if (ast != null) {
+            System.out.println(new AstPrinter().print(ast));
+        }
+
+        // TODO: apply semantic analysis
     }
 
     private static void printHelp() {
