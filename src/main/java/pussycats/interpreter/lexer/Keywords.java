@@ -35,9 +35,9 @@ public final class Keywords {
         KEYWORDS.put("none", TokenType.NONE);
 
         // type indicators
-        KEYWORDS.put("int", TokenType.INT);
+        KEYWORDS.put("int", TokenType.INT_TYPE);
         KEYWORDS.put("real", TokenType.REAL_TYPE);
-        KEYWORDS.put("bool", TokenType.BOOL);
+        KEYWORDS.put("bool", TokenType.BOOL_TYPE);
         KEYWORDS.put("string", TokenType.STRING_TYPE);
 
         // logical operators
