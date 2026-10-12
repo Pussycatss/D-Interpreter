@@ -1,8 +1,15 @@
 package pussycats.interpreter.parser;
 
+import pussycats.interpreter.ast.Expression;
+import pussycats.interpreter.ast.Node;
+import pussycats.interpreter.ast.Statement;
+import pussycats.interpreter.ast.TypeIndicator;
 import pussycats.interpreter.lexer.Token;
 import pussycats.interpreter.lexer.TokenType;
 import pussycats.interpreter.lexer.Keywords;
+
+import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 
 public final class Parser {
@@ -17,47 +24,403 @@ public final class Parser {
     private final List<Token> tokens;
     private final ErrorReporter reporter;
     private int current = 0;
-    private final int loopDepth = 0;
+    private int loopDepth = 0;
 
     public Parser(List<Token> tokens, String source, String filename) {
         this.tokens = tokens;
         this.reporter = new ErrorReporter(source, filename);
     }
 
-    public void parse() {
-        parseProgram();
+    public Node parse() {
+        try {
+            return parseProgram();
+        } catch (ParsePanic ignored) {
+            return null;
+        }
     }
 
-    private void parseProgram() {
-
+    private Statement.Block parseProgram() {
+        List<Statement> statements = new ArrayList<>();
+        skipSeparators();
+        while (!isAtEnd()) {
+            statements.add(parseStatement());
+            if (!isAtEnd()) {
+                requireStatementSeparator();
+                skipSeparators();
+            }
+        }
+        return new Statement.Block(statements);
     }
 
-    private void parseStatement() {
-
+    private List<Statement> parseBody() {
+        List<Statement> statements = new ArrayList<>();
+        skipSeparators();
+        while (!isAtEnd() && !check(TokenType.END) && !check(TokenType.ELSE)) {
+            statements.add(parseStatement());
+            if (!isAtEnd() && !check(TokenType.END) && !check(TokenType.ELSE)) {
+                requireStatementSeparator(TokenType.END, TokenType.ELSE);
+                skipSeparators();
+            }
+        }
+        return statements;
     }
 
-    private void parseExpression() {
-
+    private Statement parseStatement() {
+        if (match(TokenType.VAR))    return parseVarDecl();
+        if (match(TokenType.PRINT))  return parsePrint();
+        if (match(TokenType.IF))     return parseIf();
+        if (match(TokenType.WHILE))  return parseWhile();
+        if (match(TokenType.LOOP))   return parseLoop();
+        if (match(TokenType.FOR))    return parseFor();
+        if (match(TokenType.EXIT))   return parseExit();
+        if (match(TokenType.RETURN)) return parseReturn();
+        return parseAssignOrExpressionStatement();
     }
 
-    private void parseRelation() {
-
+    private Statement parseVarDecl() {
+        List<Statement.VarDecl> decls = new ArrayList<>();
+        do {
+            Token name = consume(TokenType.IDENTIFIER, "Expected a variable name after 'var'");
+            Expression init = match(TokenType.ASSIGN) ? parseExpression() : null;
+            decls.add(new Statement.VarDecl(name.lexeme(), init));
+        } while (match(TokenType.COMMA));
+        return decls.size() == 1 ? decls.getFirst() : new Statement.VarDeclGroup(decls);
     }
 
-    private void parseFactor() {
-
+    private Statement parsePrint() {
+        List<Expression> values = new ArrayList<>();
+        values.add(parseExpression());
+        while (match(TokenType.COMMA)) values.add(parseExpression());
+        return new Statement.PrintStatement(values);
     }
 
-    private void parseTerm() {
-
+    private Statement parseAssignOrExpressionStatement() {
+        Token start = peek();
+        Expression expr = parseExpression();
+        if (match(TokenType.ASSIGN)) {
+            Expression value = parseExpression();
+            return new Statement.Assign(expr, value);
+        }
+        return new Statement.ExpressionStatement(expr);
     }
 
-    private void parseUnary() {
+    private Statement parseIf() {
+        Token open = previous();
+        Expression cond = parseExpression();
 
+        if (match(TokenType.ARROW)) {
+            Statement then = parseStatement();
+            return new Statement.IfStatement(cond, then, null);
+        }
+
+        consume(TokenType.THEN, "Expected 'then' or '=>' after condition of 'if'");
+        Statement then = new Statement.Block(parseBody());
+        Statement otherwise = null;
+        if (match(TokenType.ELSE)) {
+            otherwise = new Statement.Block(parseBody());
+        }
+        consumeEnd("if", open);
+        return new Statement.IfStatement(cond, then, otherwise);
     }
 
-    private void parsePrimary() {
+    private Statement parseWhile() {
+        Token open = previous();
+        Expression cond = parseExpression();
+        consume(TokenType.LOOP, "Expected 'loop' after condition of 'while'");
 
+        loopDepth++;
+        List<Statement> body;
+        try {
+            body = parseBody();
+        } finally {
+            loopDepth--;
+        }
+        consumeEnd("while", open);
+        return new Statement.WhileStatement(cond, body);
+    }
+
+    private Statement parseLoop() {
+        Token open = previous();
+        loopDepth++;
+        List<Statement> body;
+        try {
+            body = parseBody();
+        } finally {
+            loopDepth--;
+        }
+        consumeEnd("loop", open);
+        return new Statement.LoopStatement(body);
+    }
+
+    private Statement parseFor() {
+        Token open = previous();
+
+        if (check(TokenType.LOOP)) {
+            advance();
+            loopDepth++;
+            List<Statement> body;
+            try {
+                body = parseBody();
+            } finally {
+                loopDepth--;
+            }
+            consumeEnd("for", open);
+            return new Statement.LoopStatement(body);
+        }
+
+        String var = null;
+        if (check(TokenType.IDENTIFIER) && peekAt(1).type() == TokenType.IN) {
+            var = advance().lexeme();
+            advance();
+        }
+
+        Expression first = parseExpression();
+
+        if (match(TokenType.RANGE)) {
+            Expression to = parseExpression();
+            consume(TokenType.LOOP, "Expected 'loop' in 'for'");
+            loopDepth++;
+            List<Statement> body;
+            try {
+                body = parseBody();
+            } finally {
+                loopDepth--;
+            }
+            consumeEnd("for", open);
+            return new Statement.ForRangeStatement(var, first, to, body);
+        }
+
+        consume(TokenType.LOOP, "Expected 'loop' in 'for'");
+        loopDepth++;
+        List<Statement> body;
+        try {
+            body = parseBody();
+        } finally {
+            loopDepth--;
+        }
+        consumeEnd("for", open);
+        return new Statement.ForInStatement(var, first, body);
+    }
+
+    private Statement parseExit() {
+        if (loopDepth == 0) {
+            throw error(previous(), "'exit' can only appear inside a loop");
+        }
+        return new Statement.ExitStatement();
+    }
+
+    private Statement parseReturn() {
+        Expression value = isAtStatementBoundary() ? null : parseExpression();
+        return new Statement.ReturnStatement(value);
+    }
+
+    private Expression parseExpression() {
+        Expression left = parseRelation();
+        while (match(TokenType.OR, TokenType.AND, TokenType.XOR)) {
+            TokenType op = previous().type();
+            Expression right = parseRelation();
+            left = new Expression.Binary(left, op, right);
+        }
+        return left;
+    }
+
+    private Expression parseRelation() {
+        Expression left = parseFactor();
+        if (match(TokenType.LESS, TokenType.LESS_EQUAL,
+                  TokenType.GREATER, TokenType.GREATER_EQUAL,
+                  TokenType.EQUAL, TokenType.NOT_EQUAL)) {
+            TokenType op = previous().type();
+            Expression right = parseFactor();
+            return new Expression.Binary(left, op, right);
+        }
+        return left;
+    }
+
+    private Expression parseFactor() {
+        Expression left = parseTerm();
+        while (match(TokenType.PLUS, TokenType.MINUS)) {
+            TokenType op = previous().type();
+            Expression right = parseTerm();
+            left = new Expression.Binary(left, op, right);
+        }
+        return left;
+    }
+
+    private Expression parseTerm() {
+        Expression left = parseUnary();
+        while (match(TokenType.ASTERISK, TokenType.SLASH)) {
+            TokenType op = previous().type();
+            Expression right = parseUnary();
+            left = new Expression.Binary(left, op, right);
+        }
+        return left;
+    }
+
+    private Expression parseUnary() {
+        if (match(TokenType.PLUS, TokenType.MINUS, TokenType.NOT)) {
+            TokenType op = previous().type();
+            Expression operand = parseUnary();
+            return new Expression.Unary(op, operand);
+        }
+        Expression expr = parsePrimary();
+        if (match(TokenType.IS)) {
+            return new Expression.IsCheck(expr, parseTypeIndicator());
+        }
+        return expr;
+    }
+
+    private Expression parsePrimary() {
+        Expression expr = parseAtom();
+        while (true) {
+            if (match(TokenType.LBRACKET)) {
+                Expression index = parseExpression();
+                consume(TokenType.RBRACKET, "Expected ']' to close index expression");
+                expr = new Expression.Index(expr, index);
+            } else if (match(TokenType.LPAREN)) {
+                List<Expression> args = new ArrayList<>();
+                if (!check(TokenType.RPAREN)) {
+                    args.add(parseExpression());
+                    while (match(TokenType.COMMA)) {
+                        args.add(parseExpression());
+                    }
+                }
+                consume(TokenType.RPAREN, "Expected ')' to close argument list");
+                expr = new Expression.Call(expr, args);
+            } else if (match(TokenType.DOT)) {
+                if (match(TokenType.IDENTIFIER)) {
+                    expr = new Expression.Field(expr, previous().lexeme());
+                } else if (match(TokenType.INTEGER)) {
+                    int n = new BigInteger(previous().lexeme()).intValueExact();
+                    expr = new Expression.FieldIndex(expr, n);
+                } else {
+                    throw error(peek(), "Expected a name or index after '.'");
+                }
+            } else {
+                return expr;
+            }
+        }
+    }
+
+    private Expression parseAtom() {
+        if (match(TokenType.INTEGER)) {
+            return new Expression.IntLit(new BigInteger(previous().lexeme()));
+        }
+        if (match(TokenType.REAL)) {
+            return new Expression.RealLit(Double.parseDouble(previous().lexeme()));
+        }
+        if (match(TokenType.STRING)) {
+            return new Expression.StringLit((String) previous().literal());
+        }
+        if (match(TokenType.TRUE)) {
+            return new Expression.BoolLit(true);
+        }
+        if (match(TokenType.FALSE)) {
+            return new Expression.BoolLit(false);
+        }
+        if (match(TokenType.NONE)) {
+            return new Expression.NoneLit();
+        }
+        if (match(TokenType.IDENTIFIER)) {
+            return new Expression.Ident(previous().lexeme());
+        }
+        if (match(TokenType.LPAREN)) {
+            Expression inner = parseExpression();
+            consume(TokenType.RPAREN, "Expected ')' to close argument list");
+            return inner;
+        }
+        if (match(TokenType.LBRACKET)) {
+            return parseArrayLit();
+        }
+        if (match(TokenType.LBRACE)) {
+            return parseTupleLit();
+        }
+        if (match(TokenType.FUNC)) {
+            return parseFuncLit();
+        }
+
+        throw error(peek(), "Expected an expression");
+    }
+
+    private Expression parseArrayLit() {
+        List<Expression> elems = new ArrayList<>();
+        if (!check(TokenType.RBRACKET)) {
+            elems.add(parseExpression());
+            while (match(TokenType.COMMA)) {
+                elems.add(parseExpression());
+            }
+        }
+        consume(TokenType.RBRACKET, "Expected ']' to close array literal");
+        return new Expression.ArrayLit(elems);
+    }
+
+    private Expression parseTupleLit() {
+        List<Expression.TupleEntry> entries = new ArrayList<>();
+        if (!check(TokenType.RBRACE)) {
+            do {
+                if (check(TokenType.IDENTIFIER) && peekAt(1).type() == TokenType.ASSIGN) {
+                    String name = advance().lexeme();
+                    advance();
+                    entries.add(new Expression.TupleEntry(name, parseExpression()));
+                } else {
+                    entries.add(new Expression.TupleEntry(null, parseExpression()));
+                }
+            } while (match(TokenType.COMMA));
+        }
+        consume(TokenType.RBRACE, "Expected '}' to close tuple literal");
+        return new Expression.TupleLit(entries);
+    }
+
+    private Expression parseFuncLit() {
+        List<String> params = new ArrayList<>();
+        if (match(TokenType.LPAREN)) {
+            if (!check(TokenType.RPAREN)) {
+                params.add(consume(TokenType.IDENTIFIER, "Expected parameter name").lexeme());
+                while (match(TokenType.COMMA)) {
+                    params.add(consume(TokenType.IDENTIFIER, "Expected parameter name").lexeme());
+                }
+            }
+            consume(TokenType.RPAREN, "Expected ')' to close parameter list");
+        }
+        if (match(TokenType.ARROW)) {
+            Expression body = parseExpression();
+            return new Expression.FuncLit(params, body, false);
+        }
+        if (match(TokenType.IS)) {
+            Statement.Block body = new Statement.Block(parseBody());
+            consumeEnd("func", previous());
+            return new Expression.FuncLit(params, body, true);
+        }
+        throw error(peek(), "Expected '=>' or 'is' in function literal");
+    }
+
+    private TypeIndicator parseTypeIndicator() {
+        if (match(TokenType.INT_TYPE)) {
+            return TypeIndicator.INT;
+        }
+        if (match(TokenType.REAL_TYPE)) {
+            return TypeIndicator.REAL;
+        }
+        if (match(TokenType.BOOL_TYPE)) {
+            return TypeIndicator.BOOL;
+        }
+        if (match(TokenType.STRING_TYPE)) {
+            return TypeIndicator.STRING;
+        }
+        if (match(TokenType.NONE)) {
+            return TypeIndicator.NONE;
+        }
+        if (match(TokenType.FUNC)) {
+            return TypeIndicator.FUNC;
+        }
+        if (match(TokenType.LBRACKET)) {
+            consume(TokenType.RBRACKET, "Expected ']' after '[' in type indicator");
+            return TypeIndicator.VECTOR;
+        }
+        if (match(TokenType.LBRACE)) {
+            consume(TokenType.RBRACE, "Expected '}' after '{' in type indicator");
+            return TypeIndicator.TUPLE;
+        }
+        throw error(peek(), "Expected a type indicator (int, real, bool, string, none, [], {}, func)");
     }
 
     private void requireStatementSeparator(TokenType... terminators) {
