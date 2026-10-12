@@ -41,32 +41,70 @@ public final class Main {
     private static final int EXIT_ERROR = 1;
 
     static void main(String[] args) {
-        if (args.length == 0) {
-            new REPL("lexer");
-            System.exit(EXIT_OK);
-            return;
-        }
+        boolean dumpTokens = false;
+        boolean dumpAst = false;
+        String code = null;
+        String file = null;
 
-        if (args[0].equals("--help") || args[0].equals("-h")) {
-            printHelp();
-            System.exit(EXIT_OK);
-            return;
-        }
+        int i = 0;
 
-        if (args[0].equals("-c")) {
-            if (args.length < 2) {
-                System.err.println("Error: -c requires an argument");
-                System.exit(EXIT_ERROR);
-                return;
+        while (i < args.length) {
+            String a = args[i];
+            switch (a) {
+                case "-h", "--help" -> {
+                    printHelp();
+                    System.exit(EXIT_OK);
+                    return;
+                }
+                case "-t", "--tokens" -> dumpTokens = true;
+                case "-a", "--ast"    -> dumpAst = true;
+                case "-ta", "--all"   -> { dumpTokens = true; dumpAst = true; }
+                case "-c" -> {
+                    if (i + 1 >= args.length) {
+                        System.err.println("Error: -c requires an argument");
+                        System.exit(EXIT_ERROR);
+                        return;
+                    }
+                    code = args[++i];
+                }
+                default -> {
+                    if (a.startsWith("-")) {
+                        System.err.println("Unknown option: " + a);
+                        System.err.println("Try '--help' for usage.");
+                        System.exit(EXIT_ERROR);
+                        return;
+                    }
+                    if (file != null) {
+                        System.err.println("Error: only one input file is allowed");
+                        System.exit(EXIT_ERROR);
+                        return;
+                    }
+                    file = a;
+                }
             }
-            runString(args[1]);
+            i++;
+        }
+
+        if (!dumpTokens && !dumpAst) {
+            dumpAst = true;
+        }
+
+        if (code != null) {
+            run(code, "<string>", dumpTokens, dumpAst);
             return;
         }
 
-        runFile(args[0]);
+        if (file != null) {
+            runFile(file, dumpTokens, dumpAst);
+            return;
+        }
+
+        // No file, no -c: drop into the REPL.
+        new REPL("lexer");
+        System.exit(EXIT_OK);
     }
 
-    private static void runFile(String path) {
+    private static void runFile(String path, boolean dumpTokens, boolean dumpAst) {
         String source;
         try {
             source = Files.readString(Path.of(path));
@@ -75,28 +113,38 @@ public final class Main {
             System.exit(EXIT_ERROR);
             return;
         }
-        run(source, path);
+        run(source, path, dumpTokens, dumpAst);
     }
 
-    private static void runString(String code) {
-        run(code, "<string>");
-    }
+    private static void run(String source, String sourceName,
+                            boolean dumpTokens, boolean dumpAst) {
+        // ---- Lexer ----
+        List<Token> tokens = new Lexer(source, sourceName).scan();
 
-    private static void run(String source, String sourceName) {
-        List<Token> tokens;
-        tokens = new Lexer(source, sourceName).scan();
-
-        for (Token token : tokens) {
-            System.out.println(token);
+        if (dumpTokens) {
+            System.out.println("=== Tokens ===");
+            for (Token token : tokens) {
+                System.out.println(token);
+            }
+            System.out.println();
         }
 
+        // ---- Parser ----
         Parser parser = new Parser(tokens, source, sourceName);
         Node ast = parser.parse();
-        if (ast != null) {
+
+        if (parser.hasErrors() || ast == null) {
+            System.err.print(parser.formatErrors());
+            System.exit(EXIT_ERROR);
+            return;
+        }
+
+        if (dumpAst) {
+            System.out.println("=== AST ===");
             System.out.println(new AstPrinter().print(ast));
         }
 
-        // TODO: apply semantic analysis
+        // TODO: semantic analysis + interpretation
     }
 
     private static void printHelp() {
@@ -105,15 +153,25 @@ public final class Main {
         System.out.println("Usage:");
         System.out.println("  java pussycats.interpreter.Main [options] [file]");
         System.out.println();
-        System.out.println("Options:");
-        System.out.println("  -c <code>   Execute program passed as string");
-        System.out.println("  -h, --help  Show this help message");
+        System.out.println("Input:");
+        System.out.println("  -c <code>       Execute program passed as a string");
+        System.out.println("  <file>          Execute program from a file");
         System.out.println();
-        System.out.println("If no file is specified, reads from stdin.");
+        System.out.println("Output (default: --ast):");
+        System.out.println("  -t, --tokens    Dump the lexer's token stream");
+        System.out.println("  -a, --ast       Dump the parser's abstract syntax tree");
+        System.out.println("  -ta, --all      Dump both tokens and AST");
+        System.out.println();
+        System.out.println("Other:");
+        System.out.println("  -h, --help      Show this help message");
+        System.out.println();
+        System.out.println("With no file and no -c, starts a REPL.");
         System.out.println();
         System.out.println("Examples:");
         System.out.println("  java pussycats.interpreter.Main script.d");
         System.out.println("  java pussycats.interpreter.Main -c \"print 42\"");
+        System.out.println("  java pussycats.interpreter.Main -t script.d");
+        System.out.println("  java pussycats.interpreter.Main --all -c \"var x := 1\"");
     }
 
     private Main() {
