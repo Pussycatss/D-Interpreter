@@ -1,5 +1,9 @@
 package pussycats.interpreter.ast;
 
+import pussycats.interpreter.lexer.TokenType;
+
+import static pussycats.interpreter.lexer.TokenType.PLUS;
+
 public class AstPrinter {
     public String print(Node n) {
         StringBuilder sb = new StringBuilder();
@@ -72,13 +76,101 @@ public class AstPrinter {
 
     private String abbrev(Expression e) {
         return switch (e) {
-            case Expression.IntLit i -> i.value().toString();
-            case Expression.RealLit r -> Double.toString(r.value());
+            case Expression.IntLit    i -> i.value().toString();
+            case Expression.RealLit   r -> formatReal(r.value());
             case Expression.StringLit s -> "\"" + s.value() + "\"";
-            case Expression.BoolLit b -> Boolean.toString(b.value());
-            case Expression.Ident i -> i.name();
-            case Expression.NoneLit ignored -> "none";
-            default -> "<expression>";
+            case Expression.BoolLit   b -> Boolean.toString(b.value());
+            case Expression.Ident     i -> i.name();
+            case Expression.NoneLit   ignored -> "none";
+            case Expression.Unary u -> switch (u.op()) {
+                case MINUS -> "-" + abbrev(u.operand());
+                case PLUS  -> "+" + abbrev(u.operand());
+                case NOT   -> "not" + abbrev(u.operand());
+                default    -> u.op() + " " + abbrev(u.operand());
+            };
+            case Expression.Binary b -> "(" + abbrev(b.left()) + " " + opSymbol(b.op()) + " " + abbrev(b.right()) + ")";
+            case Expression.Index ix -> abbrev(ix.target()) + "[" + abbrev(ix.index()) + "]";
+            case Expression.Call c -> {
+                StringBuilder sb = new StringBuilder(abbrev(c.callee())).append('(');
+                for (int i = 0; i < c.args().size(); i++) {
+                    if (i > 0) sb.append(", ");
+                    sb.append(abbrev(c.args().get(i)));
+                }
+                yield sb.append(')').toString();
+            }
+            case Expression.Field f      -> abbrev(f.target()) + '.' + f.name();
+            case Expression.FieldIndex f -> abbrev(f.target()) + '.' + f.index();
+            case Expression.IsCheck c    -> "(" + abbrev(c.target()) + " is " + c.type() + ")";
+            case Expression.ArrayLit a   -> {
+                StringBuilder sb = new StringBuilder("[");
+                for (int i = 0; i < a.elements().size(); i++) {
+                    if (i > 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(abbrev(a.elements().get(i)));
+                }
+                yield sb.append(']').toString();
+            }
+            case Expression.TupleLit t -> {
+                StringBuilder sb = new StringBuilder("{");
+                for (int i = 0; i < t.entries().size(); i++) {
+                    if (i > 0) {
+                        sb.append(", ");
+                    }
+                    var entry = t.entries().get(i);
+                    if (entry.name() != null) {
+                        sb.append(entry.name()).append(" := ");
+                        sb.append(abbrev(entry.value()));
+                    }
+                }
+                yield sb.append('}').toString();
+            }
+            case Expression.FuncLit f -> {
+                StringBuilder sb = new StringBuilder("func(");
+                for (int i = 0; i < f.params().size(); i++) {
+                    if (i > 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(f.params().get(i));
+                }
+                sb.append(") ");
+
+                switch (f.body()) {
+                    case Expression ex ->
+                        sb.append("=> ").append(abbrev(ex));
+                    case Statement.Block b ->
+                        sb.append("is {").append(b.statements().size())
+                                .append(b.statements().size() == 1 ? " stmt" : " stmts").append("} end");
+                    default -> sb.append("???");
+                }
+                yield sb.toString();
+            }
+        };
+    }
+
+    private static String formatReal(double d) {
+        if (d == Math.floor(d) && !Double.isInfinite(d)) {
+            return d + ".0";
+        }
+        return Double.toString(d);
+    }
+
+    private static String opSymbol(TokenType op) {
+        return switch (op) {
+            case PLUS          -> "+";
+            case MINUS         -> "-";
+            case ASTERISK      -> "*";
+            case SLASH         -> "/";
+            case LESS          -> "<";
+            case LESS_EQUAL    -> "<=";
+            case GREATER       -> ">";
+            case GREATER_EQUAL -> ">=";
+            case EQUAL         -> "=";
+            case NOT_EQUAL     ->  "/=";
+            case AND           -> "and";
+            case OR            -> "or";
+            case XOR           -> "xor";
+            default            -> op.name();
         };
     }
 }
