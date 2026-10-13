@@ -4,13 +4,32 @@ import pussycats.interpreter.lexer.TokenType;
 
 import static pussycats.interpreter.lexer.TokenType.PLUS;
 
+/**
+ * Prints an AST as an indented tree, one node per line.
+ *
+ * Used for debugging and tests. Statements are printed as nested nodes,
+ * while simple expressions inside them (conditions, ranges, iterables)
+ * are shortened to a single line, e.g. {@code cond: (x > 5)}.
+ */
 public class AstPrinter {
+
+    /**
+     * Returns the tree text for the given node and all its children.
+     *
+     * @param n root node to print
+     * @return multi-line string, indented by two spaces per level
+     */
     public String print(Node n) {
         StringBuilder sb = new StringBuilder();
         print(n, sb, 0);
         return sb.toString();
     }
 
+    /**
+     * Appends one node and, recursively, its children to {@code sb}.
+     *
+     * @param depth current nesting level, used for indentation
+     */
     private void print(Node n, StringBuilder sb, int depth) {
         indent(sb, depth);
         switch (n) {
@@ -61,6 +80,7 @@ public class AstPrinter {
                 print(l.body(), sb, depth + 1);
             }
             case Statement.ForRangeStatement f -> {
+                // A loop without a variable name is printed as "_"
                 sb.append("ForRange(").append(f.var() == null ? "_" : f.var()).append(")\n");
                 indent(sb, depth + 1);
                 sb.append("from: ").append(abbrev(f.from())).append('\n');
@@ -103,6 +123,7 @@ public class AstPrinter {
                 print(ix.index(), sb, depth + 1);
             }
             case Expression.Call c -> {
+                // The number in brackets is the argument count
                 sb.append("Call(").append(c.args().size()).append(")\n");
                 print(c.callee(), sb, depth + 1);
                 for (Expression e : c.args()) {
@@ -140,6 +161,7 @@ public class AstPrinter {
                     sb.append(f.params().get(i));
                 }
                 sb.append(") ");
+                // "=> expr" form or "is ... end" block form
                 switch (f.body()) {
                     case Expression e -> sb.append("=>\n");
                     case Statement.Block b -> sb.append("is ").append(b.statements().size())
@@ -168,6 +190,13 @@ public class AstPrinter {
         }
     }
 
+    /**
+     * Converts an expression to a short one-line string, e.g. {@code (a + 1)}
+     * or {@code f(x, y)}. Binary expressions are always wrapped in parentheses
+     * so that the evaluation order is visible.
+     *
+     * Function bodies and tuple entries are shown in compact form.
+     */
     private String abbrev(Expression e) {
         return switch (e) {
             case Expression.IntLit    i -> i.value().toString();
@@ -231,10 +260,10 @@ public class AstPrinter {
 
                 switch (f.body()) {
                     case Expression ex ->
-                        sb.append("=> ").append(abbrev(ex));
+                            sb.append("=> ").append(abbrev(ex));
                     case Statement.Block b ->
-                        sb.append("is {").append(b.statements().size())
-                                .append(b.statements().size() == 1 ? " stmt" : " stmts").append("} end");
+                            sb.append("is {").append(b.statements().size())
+                                    .append(b.statements().size() == 1 ? " stmt" : " stmts").append("} end");
                     default -> sb.append("???");
                 }
                 yield sb.toString();
@@ -242,6 +271,7 @@ public class AstPrinter {
         };
     }
 
+    /** Formats a real number so that whole values keep a decimal part ({@code 2.0}, not {@code 2}). */
     private static String formatReal(double d) {
         if (d == Math.floor(d) && !Double.isInfinite(d)) {
             return d + ".0";
@@ -249,6 +279,7 @@ public class AstPrinter {
         return Double.toString(d);
     }
 
+    /** Maps an operator token to the symbol used in the source code; unknown operators fall back to the token name. */
     private static String opSymbol(TokenType op) {
         return switch (op) {
             case PLUS          -> "+";
