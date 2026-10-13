@@ -2,11 +2,9 @@ package pussycats.interpreter.ast;
 
 import pussycats.interpreter.lexer.TokenType;
 
-import static pussycats.interpreter.lexer.TokenType.PLUS;
-
 /**
  * Prints an AST as an indented tree, one node per line.
- *
+ * <p>
  * Used for debugging and tests. Statements are printed as nested nodes,
  * while simple expressions inside them (conditions, ranges, iterables)
  * are shortened to a single line, e.g. {@code cond: (x > 5)}.
@@ -165,7 +163,7 @@ public class AstPrinter {
                 switch (f.body()) {
                     case Expression e -> sb.append("=>\n");
                     case Statement.Block b -> sb.append("is ").append(b.statements().size())
-                            .append(b.statements().size() == 1 ? " stmts" : " stmt").append(" end\n");
+                            .append(b.statements().size() == 1 ? " stmt" : " stmts").append(" end\n");
                     default -> sb.append("???\n");
                 }
                 print(f.body(), sb, depth + 1);
@@ -194,7 +192,7 @@ public class AstPrinter {
      * Converts an expression to a short one-line string, e.g. {@code (a + 1)}
      * or {@code f(x, y)}. Binary expressions are always wrapped in parentheses
      * so that the evaluation order is visible.
-     *
+     * <p>
      * Function bodies and tuple entries are shown in compact form.
      */
     private String abbrev(Expression e) {

@@ -35,12 +35,18 @@ class ParserTest {
         return stmts(src).getFirst();
     }
 
+    /**
+     * Parses a single expression by wrapping it in {@code print} and pulling
+     * the value back out. Bare expressions are not statements in D, so this
+     * is the simplest way to reuse the statement-parsing path.
+     */
     private static Expression expr(String src) {
-        // wrap so we can reuse the statement path
-        var stmt = first(src);
-        assertInstanceOf(Statement.ExpressionStatement.class, stmt,
-                "expected an expression statement, got " + stmt);
-        return ((Statement.ExpressionStatement) stmt).expression();
+        var stmt = first("print " + src);
+        var print = assertInstanceOf(Statement.PrintStatement.class, stmt,
+                "expected a print statement, got " + stmt);
+        assertEquals(1, print.values().size(),
+                "expected one print value for: <" + src + ">");
+        return print.values().getFirst();
     }
 
     /* ============ program structure ============ */
@@ -231,7 +237,7 @@ class ParserTest {
         assertNull(g.decls().get(2).init());
     }
 
-    /* ============ assignment vs expression statement ============ */
+    /* ============ assignment ============ */
 
     @Test void assignment() {
         var a = assertInstanceOf(Statement.Assign.class, first("x := 1"));
@@ -244,8 +250,9 @@ class ParserTest {
         assertInstanceOf(Expression.Index.class, a.target());
     }
 
-    @Test void bareExpressionIsStatement() {
-        assertInstanceOf(Statement.ExpressionStatement.class, first("f(1)"));
+    @Test void assignmentToField() {
+        var a = assertInstanceOf(Statement.Assign.class, first("t.a := 5"));
+        assertInstanceOf(Expression.Field.class, a.target());
     }
 
     /* ============ if ============ */
@@ -254,6 +261,11 @@ class ParserTest {
         var i = assertInstanceOf(Statement.IfStatement.class, first("if x => print 1"));
         assertInstanceOf(Expression.Ident.class, i.cond());
         assertNull(i.otherwise());
+    }
+
+    @Test void shortIfBodyIsWrappedInBlock() {
+        var i = assertInstanceOf(Statement.IfStatement.class, first("if x => print 1"));
+        assertInstanceOf(Statement.Block.class, i.then());
     }
 
     @Test void longIfWithoutElse() {
@@ -274,15 +286,13 @@ class ParserTest {
     @Test void whileLoop() {
         var w = assertInstanceOf(Statement.WhileStatement.class,
                 first("while x < 10 loop print x end"));
-        var body = w.body();
-        assertEquals(1, body.statements().size());
+        assertEquals(1, w.body().statements().size());
     }
 
     @Test void bareLoop() {
         var l = assertInstanceOf(Statement.LoopStatement.class,
                 first("loop print 1; exit end"));
-        var body = l.body();
-        assertEquals(1, body.statements().size());
+        assertEquals(2, l.body().statements().size());
     }
 
     @Test void exitInsideLoopIsFine() {

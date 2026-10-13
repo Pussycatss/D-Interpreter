@@ -14,10 +14,10 @@ import java.util.List;
 
 /**
  * Recursive-descent parser: turns the token list from the lexer into an AST.
- *
+ * <p>
  * Each grammar rule is a {@code parseXxx} method. Expression methods are ordered
  * by precedence, from the lowest ({@code or/and/xor}) to the highest (atoms).
- *
+ * <p>
  * Errors do not stop the parser: they are collected in an {@link ErrorReporter},
  * and the parser skips to the next statement ({@link #synchronize()}) and continues,
  * so several errors can be reported in one run.
@@ -75,13 +75,11 @@ public final class Parser {
         while (!isAtEnd()) {
             try {
                 statements.add(parseStatement());
-                if (!isAtEnd()) {
-                    requireStatementSeparator();
-                    skipSeparators();
-                }
+                requireStatementSeparator();
             } catch (ParsePanic ignored) {
                 synchronize();
             }
+            skipSeparators();
         }
         return new Statement.Block(statements);
     }
@@ -112,10 +110,37 @@ public final class Parser {
         if (isAtStatementBoundary()) {
             throw panic(peek(),
                     "Expected a statement",
-                    "this position needs a statement: try 'print', 'var', "
-                            + "'if', 'loop', 'for', or an expression");
+                    "this position needs a statement: try 'print', 'var', 'if', " +
+                              "'while', 'loop', 'for', or an assignment using ':='");
         }
-        return parseAssignOrExpressionStatement();
+        checkKeywordTypo();
+        return parseAssignment();
+    }
+
+    private void checkKeywordTypo() {
+        if (!check(TokenType.IDENTIFIER)) return;
+        String close = findClosestKeyword(peek().lexeme());
+        if (close == null) return;
+        TokenType next = peekAt(1).type();
+        if (next == TokenType.ASSIGN
+                || next == TokenType.DOT
+                || next == TokenType.LBRACKET
+                || next == TokenType.LPAREN
+                || isExpressionOperator(next)) {
+            return;
+        }
+
+        throw panic(peek(), "Unknown statement",
+                "did you mean '" + close + "'?");
+    }
+
+    private static boolean isExpressionOperator(TokenType t) {
+        return switch (t) {
+            case PLUS, MINUS, ASTERISK, SLASH,
+                 LESS, LESS_EQUAL, GREATER, GREATER_EQUAL,
+                 EQUAL, NOT_EQUAL, AND, OR, XOR, IS -> true;
+            default -> false;
+        };
     }
 
     /** {@code var a := 1, b, c := 3}: one declaration, or a {@code VarDeclGroup} if there are several. */
@@ -144,13 +169,16 @@ public final class Parser {
     }
 
     /** Parses an expression; if it is followed by {@code :=}, it becomes an assignment. */
-    private Statement parseAssignOrExpressionStatement() {
+    private Statement parseAssignment() {
         Expression expr = parseExpression();
-        if (match(TokenType.ASSIGN)) {
-            Expression value = parseExpression();
-            return new Statement.Assign(expr, value);
+        if (!match(TokenType.ASSIGN)) {
+            throw panic(peek(),
+                    "Expected ':=' after reference",
+                    "every statement must be one of: var, print, if, while, " +
+                              "loop, for, exit, return, or an assignment using ':='");
         }
-        return new Statement.ExpressionStatement(expr);
+        Expression value = parseExpression();
+        return new Statement.Assign(expr, value);
     }
 
     /** Supports both forms: {@code if c => stmt} and {@code if c then ... [else ...] end}. */
@@ -159,8 +187,8 @@ public final class Parser {
         Expression cond = parseExpression();
 
         if (match(TokenType.ARROW)) {
-            Statement then = parseStatement();
-            return new Statement.IfStatement(cond, then, null);
+            Statement s = parseStatement();
+            return new Statement.IfStatement(cond, new Statement.Block(List.of(s)), null);
         }
 
         consume(TokenType.THEN, "Expected 'then' or '=>' after condition of 'if'");
@@ -204,7 +232,7 @@ public final class Parser {
 
     /**
      * Parses all forms of {@code for}:
-     *
+     * <p>
      *   {@code for loop ... end} – infinite loop
      *   {@code for [i in] a..b loop ... end} – range loop
      *   {@code for [i in] iterable loop ... end} – loop over a collection
@@ -343,10 +371,12 @@ public final class Parser {
         Expression expr = parseAtom();
         while (true) {
             if (match(TokenType.LBRACKET)) {
+                Token open = previous();
                 Expression index = parseExpression();
-                consume(TokenType.RBRACKET, "Expected ']' to close index expression");
+                closeDelimiter(TokenType.RBRACKET, open, "]", "index expression");
                 expr = new Expression.Index(expr, index);
             } else if (match(TokenType.LPAREN)) {
+                Token open = previous();
                 List<Expression> args = new ArrayList<>();
                 if (!check(TokenType.RPAREN)) {
                     args.add(parseExpression());
@@ -354,7 +384,7 @@ public final class Parser {
                         args.add(parseExpression());
                     }
                 }
-                consume(TokenType.RPAREN, "Expected ')' to close argument list");
+                closeDelimiter(TokenType.RPAREN, open, ")", "argument list");
                 expr = new Expression.Call(expr, args);
             } else if (match(TokenType.DOT)) {
                 if (match(TokenType.IDENTIFIER)) {
@@ -401,10 +431,12 @@ public final class Parser {
             return inner;
         }
         if (match(TokenType.LBRACKET)) {
-            return parseArrayLit();
+            Token open = previous();
+            return parseArrayLit(open);
         }
         if (match(TokenType.LBRACE)) {
-            return parseTupleLit();
+            Token open = previous();
+            return parseTupleLit(open);
         }
         if (match(TokenType.FUNC)) {
             return parseFuncLit();
@@ -413,7 +445,7 @@ public final class Parser {
         throw error(peek(), "Expected an expression");
     }
 
-    private Expression parseArrayLit() {
+    private Expression parseArrayLit(Token open) {
         List<Expression> elems = new ArrayList<>();
         if (!check(TokenType.RBRACKET)) {
             elems.add(parseExpression());
@@ -421,12 +453,12 @@ public final class Parser {
                 elems.add(parseExpression());
             }
         }
-        consume(TokenType.RBRACKET, "Expected ']' to close array literal");
+        closeDelimiter(TokenType.RBRACKET, open, "]", "array literal");
         return new Expression.ArrayLit(elems);
     }
 
     /** Tuple elements may be named ({@code x := 1}) or unnamed ({@code 1}). */
-    private Expression parseTupleLit() {
+    private Expression parseTupleLit(Token open) {
         List<Expression.TupleEntry> entries = new ArrayList<>();
         if (!check(TokenType.RBRACE)) {
             do {
@@ -442,7 +474,7 @@ public final class Parser {
                 }
             } while (match(TokenType.COMMA));
         }
-        consume(TokenType.RBRACE, "Expected '}' to close tuple literal");
+        closeDelimiter(TokenType.RBRACE, open, "}", "tuple literal");
         return new Expression.TupleLit(entries);
     }
 
@@ -451,13 +483,14 @@ public final class Parser {
         List<String> params = new ArrayList<>();
         Token funcTok = previous();
         if (match(TokenType.LPAREN)) {
+            Token open = previous();
             if (!check(TokenType.RPAREN)) {
                 params.add(consume(TokenType.IDENTIFIER, "Expected parameter name").lexeme());
                 while (match(TokenType.COMMA)) {
                     params.add(consume(TokenType.IDENTIFIER, "Expected parameter name").lexeme());
                 }
             }
-            consume(TokenType.RPAREN, "Expected ')' to close parameter list");
+            closeDelimiter(TokenType.RPAREN, open, ")", "parameter list");
         }
         if (match(TokenType.ARROW)) {
             Expression body = parseExpression();
@@ -740,12 +773,12 @@ public final class Parser {
     private static String closestIn(String text, Iterable<String> candidates) {
         String lower = text.toLowerCase();
         String best = null;
-        int bestDistance = 3;
+        int bestDistance = Math.min(3, 1 + lower.length() / 3);
         for (String candidate : candidates) {
             if (candidate.equals(lower)) {
                 continue;
             }
-            int d = levenshtein(lower, candidate);
+            int d = damerauLevenshtein(lower, candidate);
             if (d < bestDistance) {
                 bestDistance = d;
                 best = candidate;
@@ -758,23 +791,36 @@ public final class Parser {
         return closestIn(text, Keywords.getKeywords());
     }
 
-    /** Edit distance between two strings (insert, delete, replace), used for "did you mean". */
-    private static int levenshtein(String a, String b) {
-        int[][] dp = new int[a.length() + 1][b.length() + 1];
-        for (int i = 0; i <= a.length(); i++) {
+    /**
+     * Damerau–Levenshtein (optimal string alignment) edit distance: insertions,
+     * deletions, substitutions, and transpositions of two adjacent characters.
+     * <p>
+     * The transposition rule is what makes {@code "pritn"} → {@code "print"} a
+     * distance of 1 instead of 2, which matters for "did you mean" suggestions.
+     */
+    private static int damerauLevenshtein(String a, String b) {
+        int n = a.length();
+        int m = b.length();
+        int[][] dp = new int[n + 1][m + 1];
+        for (int i = 0; i <= n; i++) {
             dp[i][0] = i;
         }
-        for (int j = 0; j <= b.length(); j++) {
+        for (int j = 0; j <= m; j++) {
             dp[0][j] = j;
         }
-        for (int i = 1; i <= a.length(); i++) {
-            for (int j = 1; j <= b.length(); j++) {
+        for (int i = 1; i <= n; i++) {
+            for (int j = 1; j <= m; j++) {
                 int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
-                dp[i][j] = Math.min(
-                        Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1),
-                        dp[i - 1][j - 1] + cost);
+                dp[i][j] = Math.min(Math.min(dp[i - 1][j] + 1,
+                                             dp[i][j - 1] + 1),
+                                             dp[i - 1][j - 1] + cost);
+                if (i > 1 && j > 1
+                        && a.charAt(i - 1) == b.charAt(j - 2)
+                        && a.charAt(i - 2) == b.charAt(j - 1)) {
+                    dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + 1);
+                }
             }
         }
-        return dp[a.length()][b.length()];
+        return dp[n][m];
     }
 }

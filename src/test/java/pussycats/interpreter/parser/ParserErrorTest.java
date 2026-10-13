@@ -2,6 +2,7 @@ package pussycats.interpreter.parser;
 
 import org.junit.jupiter.api.Test;
 import pussycats.interpreter.ast.Node;
+import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.lexer.Lexer;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -82,5 +83,29 @@ class ParserErrorTest {
         var err = p.formatErrors();
         assertTrue(err.contains("line 2"),
                 "expected an error on line 2 but got:\n" + err);
+    }
+
+    @Test void misspelledPrintAtStatementStart() {
+        var out = errors("prknt 42");
+        assertTrue(out.contains("print"),
+                "expected a suggestion for 'print' but got:\n" + out);
+    }
+
+    @Test void shortIdentifierDoesNotTriggerKeywordSuggestion() {
+        var out = errors("c y");
+        assertFalse(out.contains("did you mean 'if'"),
+                "false positive suggestion for 'if':\n" + out);
+    }
+
+    @Test void bareIdentifierIsNotAStatement() {
+        var out = errors("x");
+        assertTrue(out.contains(":="),
+                "expected a ':=' error for a bare identifier but got:\n" + out);
+    }
+
+    @Test void bareLiteralIsNotAStatement() {
+        var out = errors("42");
+        assertTrue(out.contains(":="),
+                "expected a ':=' error for a bare literal but got:\n" + out);
     }
 }
