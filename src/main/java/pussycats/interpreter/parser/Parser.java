@@ -12,6 +12,16 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Recursive-descent parser: turns the token list from the lexer into an AST.
+ *
+ * Each grammar rule is a {@code parseXxx} method. Expression methods are ordered
+ * by precedence, from the lowest ({@code or/and/xor}) to the highest (atoms).
+ *
+ * Errors do not stop the parser: they are collected in an {@link ErrorReporter},
+ * and the parser skips to the next statement ({@link #synchronize()}) and continues,
+ * so several errors can be reported in one run.
+ */
 public final class Parser {
 
     /** Internal control-flow signal only — never escapes this class. */
@@ -24,6 +34,7 @@ public final class Parser {
     private final List<Token> tokens;
     private final ErrorReporter reporter;
     private int current = 0;
+    /** Nesting level of loops, used to check that {@code exit} is inside a loop. */
     private int loopDepth = 0;
 
     public Parser(List<Token> tokens, String source, String filename) {
@@ -35,10 +46,16 @@ public final class Parser {
         return reporter.hasErrors();
     }
 
+    /** Returns all collected errors as one formatted string. */
     public String formatErrors() {
         return reporter.formatAll();
     }
 
+    /**
+     * Parses the whole program.
+     *
+     * @return the root {@link Statement.Block}, or {@code null} if any error was found
+     */
     public Node parse() {
         try {
             Node ast = parseProgram();
@@ -48,6 +65,10 @@ public final class Parser {
         }
     }
 
+    /**
+     * Parses top-level statements. A failed statement is skipped via
+     * {@link #synchronize()}, so parsing continues after an error.
+     */
     private Statement.Block parseProgram() {
         List<Statement> statements = new ArrayList<>();
         skipSeparators();
@@ -65,6 +86,7 @@ public final class Parser {
         return new Statement.Block(statements);
     }
 
+    /** Parses statements inside a construct, up to (not including) {@code end} or {@code else}. */
     private List<Statement> parseBody() {
         List<Statement> statements = new ArrayList<>();
         skipSeparators();
@@ -96,6 +118,7 @@ public final class Parser {
         return parseAssignOrExpressionStatement();
     }
 
+    /** {@code var a := 1, b, c := 3}: one declaration, or a {@code VarDeclGroup} if there are several. */
     private Statement parseVarDecl() {
         List<Statement.VarDecl> decls = new ArrayList<>();
         do {
@@ -120,6 +143,7 @@ public final class Parser {
         return new Statement.PrintStatement(values);
     }
 
+    /** Parses an expression; if it is followed by {@code :=}, it becomes an assignment. */
     private Statement parseAssignOrExpressionStatement() {
         Expression expr = parseExpression();
         if (match(TokenType.ASSIGN)) {
@@ -129,6 +153,7 @@ public final class Parser {
         return new Statement.ExpressionStatement(expr);
     }
 
+    /** Supports both forms: {@code if c => stmt} and {@code if c then ... [else ...] end}. */
     private Statement parseIf() {
         Token open = previous();
         Expression cond = parseExpression();
@@ -177,6 +202,14 @@ public final class Parser {
         return new Statement.LoopStatement(body);
     }
 
+    /**
+     * Parses all forms of {@code for}:
+     *
+     *   {@code for loop ... end} – infinite loop
+     *   {@code for [i in] a..b loop ... end} – range loop
+     *   {@code for [i in] iterable loop ... end} – loop over a collection
+     *
+     */
     private Statement parseFor() {
         Token open = previous();
 
@@ -227,6 +260,7 @@ public final class Parser {
         return new Statement.ForInStatement(var, first, body);
     }
 
+    /** {@code exit} is only allowed inside a loop. */
     private Statement parseExit() {
         if (loopDepth == 0) {
             throw error(previous(), "'exit' can only appear inside a loop");
@@ -234,10 +268,16 @@ public final class Parser {
         return new Statement.ExitStatement();
     }
 
+    /** {@code return} may have no value if the statement ends right after it. */
     private Statement parseReturn() {
         Expression value = isAtStatementBoundary() ? null : parseExpression();
         return new Statement.ReturnStatement(value);
     }
+
+    // ============================================================
+    // Expressions, from lowest to highest precedence:
+    // or/and/xor -> relation -> + - -> * / -> unary -> postfix -> atom
+    // ============================================================
 
     private Expression parseExpression() {
         Expression left = parseRelation();
@@ -249,11 +289,12 @@ public final class Parser {
         return left;
     }
 
+    /** Comparison operators are not chained: {@code a < b < c} is not allowed. */
     private Expression parseRelation() {
         Expression left = parseFactor();
         if (match(TokenType.LESS, TokenType.LESS_EQUAL,
-                  TokenType.GREATER, TokenType.GREATER_EQUAL,
-                  TokenType.EQUAL, TokenType.NOT_EQUAL)) {
+                TokenType.GREATER, TokenType.GREATER_EQUAL,
+                TokenType.EQUAL, TokenType.NOT_EQUAL)) {
             TokenType op = previous().type();
             Expression right = parseFactor();
             return new Expression.Binary(left, op, right);
@@ -261,6 +302,7 @@ public final class Parser {
         return left;
     }
 
+    /** Addition and subtraction (left-associative). */
     private Expression parseFactor() {
         Expression left = parseTerm();
         while (match(TokenType.PLUS, TokenType.MINUS)) {
@@ -271,6 +313,7 @@ public final class Parser {
         return left;
     }
 
+    /** Multiplication and division (left-associative). */
     private Expression parseTerm() {
         Expression left = parseUnary();
         while (match(TokenType.ASTERISK, TokenType.SLASH)) {
@@ -281,6 +324,7 @@ public final class Parser {
         return left;
     }
 
+    /** Prefix {@code + - not}, or a postfix type check {@code expr is type}. */
     private Expression parseUnary() {
         if (match(TokenType.PLUS, TokenType.MINUS, TokenType.NOT)) {
             TokenType op = previous().type();
@@ -294,6 +338,7 @@ public final class Parser {
         return expr;
     }
 
+    /** An atom followed by any number of postfix operations: {@code [i]}, {@code (args)}, {@code .name}, {@code .1}. */
     private Expression parsePrimary() {
         Expression expr = parseAtom();
         while (true) {
@@ -326,6 +371,7 @@ public final class Parser {
         }
     }
 
+    /** Literals, identifiers, parenthesized expressions, arrays, tuples and functions. */
     private Expression parseAtom() {
         if (match(TokenType.INTEGER)) {
             return new Expression.IntLit(new BigInteger(previous().lexeme()));
@@ -379,6 +425,7 @@ public final class Parser {
         return new Expression.ArrayLit(elems);
     }
 
+    /** Tuple elements may be named ({@code x := 1}) or unnamed ({@code 1}). */
     private Expression parseTupleLit() {
         List<Expression.TupleEntry> entries = new ArrayList<>();
         if (!check(TokenType.RBRACE)) {
@@ -389,7 +436,7 @@ public final class Parser {
                     entries.add(new Expression.TupleEntry(name, parseExpression()));
                 } else if (check(TokenType.IDENTIFIER) && peekAt(1).type() == TokenType.EQUAL) {
                     throw panic(peekAt(1), "Expected ':=' after tuple element name",
-                                                "did you mean ':=' instead of '='?");
+                            "did you mean ':=' instead of '='?");
                 } else {
                     entries.add(new Expression.TupleEntry(null, parseExpression()));
                 }
@@ -399,6 +446,7 @@ public final class Parser {
         return new Expression.TupleLit(entries);
     }
 
+    /** {@code func(params) => expr} or {@code func(params) is ... end}; the parameter list is optional. */
     private Expression parseFuncLit() {
         List<String> params = new ArrayList<>();
         Token funcTok = previous();
@@ -426,6 +474,7 @@ public final class Parser {
                         + " needs a body: either '=> expr' or 'is ... end'");
     }
 
+    /** Parses the type after {@code is}: {@code int, real, bool, string, none, func, [], {}}. */
     private TypeIndicator parseTypeIndicator() {
         if (match(TokenType.INT_TYPE)) {
             return TypeIndicator.INT;
@@ -458,12 +507,13 @@ public final class Parser {
                 suggestType(peek()));
     }
 
+    /** Consumes the closing token, or reports an error that mentions where the delimiter was opened. */
     private void closeDelimiter(TokenType expected, Token openTok, String closer, String what) {
         if (match(expected)) return;
         Token got = peek();
         throw panic(got, "Expected '" + closer + "' to close " + what + " opened at line " + openTok.line(),
                 closer.equals(")") ? "check for a missing ')' in the expression"
-                                   : "check for a missing '" + closer + "' before this point");
+                        : "check for a missing '" + closer + "' before this point");
     }
 
     private static final List<String> TYPE_KEYWORDS = List.of("int", "real", "bool", "string", "none", "func");
@@ -478,6 +528,11 @@ public final class Parser {
         return new Statement.Block(parseBody());
     }
 
+    /**
+     * Checks that two statements are separated by a newline or {@code ;}.
+     *
+     * @param terminators tokens that may end the statement instead (e.g. {@code end}, {@code else})
+     */
     private void requireStatementSeparator(TokenType... terminators) {
         if (isAtEnd() || check(TokenType.NEWLINE) || check(TokenType.SEMICOLON) || checkAny(terminators)) {
             return;
@@ -487,6 +542,7 @@ public final class Parser {
                 "did you forget an operator, or a separator between two statements?");
     }
 
+    /** True if the current token ends a statement (separator, {@code end}, {@code else} or end of input). */
     private boolean isAtStatementBoundary() {
         return isAtEnd()
                 || check(TokenType.NEWLINE)
@@ -495,6 +551,10 @@ public final class Parser {
                 || check(TokenType.ELSE);
     }
 
+    /**
+     * Consumes {@code end}, or reports an error that points to the line where
+     * the construct was opened.
+     */
     private void consumeEnd(String constructName, Token openTok) {
         if (match(TokenType.END)) {
             return;
@@ -533,10 +593,15 @@ public final class Parser {
         }
     }
 
+    // ============================================================
+    // Token helpers
+    // ============================================================
+
     private Token peek() {
         return tokens.get(current);
     }
 
+    /** Looks {@code offset} tokens ahead without consuming; returns EOF if past the end. */
     private Token peekAt(int offset) {
         int idx = current + offset;
         if (idx >= tokens.size()) {
@@ -566,6 +631,7 @@ public final class Parser {
         return false;
     }
 
+    /** Consumes the current token if it has one of the given types. */
     private boolean match(TokenType... types) {
         if (checkAny(types)) {
             advance();
@@ -617,6 +683,7 @@ public final class Parser {
         }
     }
 
+    /** Consumes a token of the given type, or reports an error with the given message. */
     private Token consume(TokenType type, String message) {
         if (check(type)) {
             return advance();
@@ -629,6 +696,12 @@ public final class Parser {
         return panic(at, message, suggestFor(at, null));
     }
 
+    /**
+     * Reports an error and returns a {@link ParsePanic} to be thrown by the caller
+     * ({@code throw panic(...)}). The error is recorded before the throw, so nothing is lost.
+     *
+     * @param suggestion optional hint such as "did you mean ...?", may be {@code null}
+     */
     private ParsePanic panic(Token at, String message, String suggestion) {
         String full = message + " (found " + describe(at) + ")";
         reporter.report(full, suggestion, at.line(), at.column());
@@ -659,6 +732,11 @@ public final class Parser {
         return null;
     }
 
+    /**
+     * Finds the candidate most similar to {@code text} (edit distance below 3).
+     *
+     * @return the best candidate, or {@code null} if nothing is close enough
+     */
     private static String closestIn(String text, Iterable<String> candidates) {
         String lower = text.toLowerCase();
         String best = null;
@@ -680,6 +758,7 @@ public final class Parser {
         return closestIn(text, Keywords.getKeywords());
     }
 
+    /** Edit distance between two strings (insert, delete, replace), used for "did you mean". */
     private static int levenshtein(String a, String b) {
         int[][] dp = new int[a.length() + 1][b.length() + 1];
         for (int i = 0; i <= a.length(); i++) {
