@@ -274,13 +274,15 @@ class ParserTest {
     @Test void whileLoop() {
         var w = assertInstanceOf(Statement.WhileStatement.class,
                 first("while x < 10 loop print x end"));
-        assertEquals(1, w.body().size());
+        var body = w.body();
+        assertEquals(1, body.statements().size());
     }
 
     @Test void bareLoop() {
         var l = assertInstanceOf(Statement.LoopStatement.class,
                 first("loop print 1; exit end"));
-        assertEquals(2, l.body().size());
+        var body = l.body();
+        assertEquals(1, body.statements().size());
     }
 
     @Test void exitInsideLoopIsFine() {

@@ -12,18 +12,71 @@ public class AstPrinter {
     }
 
     private void print(Node n, StringBuilder sb, int depth) {
-        sb.repeat("  ", depth);
+        indent(sb, depth);
         switch (n) {
             case Statement.Block b -> {
-                sb.append("Block\n");
+                sb.append("Block(").append(b.statements().size()).append(")\n");
                 for (Statement s : b.statements()) print(s, sb, depth + 1);
             }
-            case Statement.VarDecl v -> sb.append("VarDecl(").append(v.name()).append(v.init() == null ? "" : " := " + abbrev(v.init())).append(")\n");
+            case Statement.VarDecl v -> {
+                sb.append("VarDecl(").append(v.name()).append(")\n");
+                if (v.init() != null)
+                    print(v.init(), sb, depth + 1);
+            }
             case Statement.PrintStatement p -> {
-                sb.append("Print\n");
+                sb.append("Print(").append(p.values().size()).append(")\n");
                 for (Expression e : p.values()) {
                     print(e, sb, depth + 1);
                 }
+            }
+            case Statement.IfStatement s -> {
+                sb.append("If\n");
+                indent(sb, depth + 1);
+                sb.append("cond: ").append(abbrev(s.cond())).append('\n');
+                indent(sb, depth + 1);
+                sb.append("then:\n");
+                print(s.then(), sb, depth + 2);
+                if (s.otherwise() != null) {
+                    indent(sb, depth + 1); sb.append("else:\n");
+                    print(s.otherwise(), sb, depth + 2);
+                }
+            }
+            case Statement.Assign a -> {
+                sb.append("Assign\n");
+                indent(sb, depth + 1);
+                sb.append("target: ").append(abbrev(a.target())).append('\n');
+                indent(sb, depth + 1);
+                sb.append("value: ").append(abbrev(a.value())).append('\n');
+            }
+            case Statement.WhileStatement w -> {
+                sb.append("While\n");
+                indent(sb, depth + 1);
+                sb.append("cond: ").append(abbrev(w.cond())).append('\n');
+                indent(sb, depth + 1);
+                sb.append("body:\n");
+                print(w.body(), sb, depth + 2);
+            }
+            case Statement.LoopStatement l -> {
+                sb.append("Loop\n");
+                print(l.body(), sb, depth + 1);
+            }
+            case Statement.ForRangeStatement f -> {
+                sb.append("ForRange(").append(f.var() == null ? "_" : f.var()).append(")\n");
+                indent(sb, depth + 1);
+                sb.append("from: ").append(abbrev(f.from())).append('\n');
+                indent(sb, depth + 1);
+                sb.append("to:   ").append(abbrev(f.to())).append('\n');
+                indent(sb, depth + 1);
+                sb.append("body:\n");
+                print(f.body(), sb, depth + 2);
+            }
+            case Statement.ForInStatement s -> {
+                sb.append("ForIn(var ").append(s.var()).append(")\n");
+                indent(sb, depth + 1);
+                sb.append("iterable: ").append(abbrev(s.iterable())).append('\n');
+                indent(sb, depth + 1);
+                sb.append("body:\n");
+                print(s.body(), sb, depth + 2);
             }
             case Expression.Binary b -> {
                 sb.append("Binary(").append(b.op()).append(")\n");
@@ -36,7 +89,7 @@ public class AstPrinter {
             }
             case Expression.IntLit i -> sb.append("Int(").append(i.value()).append(")\n");
             case Expression.RealLit r -> sb.append("Real(").append(r.value()).append(")\n");
-            case Expression.StringLit s -> sb.append("String(").append(s.value()).append(")\n");
+            case Expression.StringLit s -> sb.append("String(\"").append(s.value()).append("\")\n");
             case Expression.BoolLit b -> sb.append("Bool(").append(b.value()).append(")\n");
             case Expression.NoneLit ignored -> sb.append("None\n");
             case Expression.Ident i -> sb.append("Ident(").append(i.name()).append(")\n");
@@ -47,16 +100,23 @@ public class AstPrinter {
             case Expression.Index ix -> {
                 sb.append("Index\n");
                 print(ix.target(), sb, depth + 1);
+                print(ix.index(), sb, depth + 1);
             }
             case Expression.Call c -> {
-                sb.append("Call\n");
+                sb.append("Call(").append(c.args().size()).append(")\n");
                 print(c.callee(), sb, depth + 1);
                 for (Expression e : c.args()) {
                     print(e, sb, depth + 1);
                 }
             }
-            case Expression.Field f -> sb.append("Field(").append(f.name()).append(")\n");
-            case Expression.FieldIndex f -> sb.append("FieldIndex(.").append(f.index()).append(")\n");
+            case Expression.Field f -> {
+                sb.append("Field(.").append(f.name()).append(")\n");
+                print(f.target(), sb, depth + 1);
+            }
+            case Expression.FieldIndex f -> {
+                sb.append("FieldIndex(.").append(f.index()).append(")\n");
+                print(f.target(), sb, depth + 1);
+            }
             case Expression.ArrayLit a -> {
                 sb.append("Array\n");
                 for (Expression e : a.elements()) {
@@ -66,11 +126,45 @@ public class AstPrinter {
             case Expression.TupleLit t -> {
                 sb.append("Tuple\n");
                 for (Expression.TupleEntry e : t.entries()) {
-                    sb.repeat("  ", depth + 1).append("Entry(").append(e.name()).append(")\n");
+                    indent(sb, depth + 1);
+                    sb.append("Entry(").append(e.name()).append(")\n");
                     print(e.value(), sb, depth + 2);
                 }
             }
-            default -> sb.append(n.getClass().getSimpleName()).append("\n");
+            case Expression.FuncLit f -> {
+                sb.append("Func(");
+                for (int i = 0; i < f.params().size(); i++) {
+                    if (i > 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(f.params().get(i));
+                }
+                sb.append(") ");
+                switch (f.body()) {
+                    case Expression e -> sb.append("=>\n");
+                    case Statement.Block b -> sb.append("is ").append(b.statements().size())
+                            .append(b.statements().size() == 1 ? " stmts" : " stmt").append(" end\n");
+                    default -> sb.append("???\n");
+                }
+                print(f.body(), sb, depth + 1);
+            }
+            case Statement.ExitStatement e -> sb.append("Exit\n");
+            case Statement.ExpressionStatement s -> {
+                sb.append("ExpressionStatement\n");
+                print(s.expression(), sb, depth + 1);
+            }
+            case Statement.ReturnStatement r -> {
+                sb.append("Return\n");
+                if (r.value() != null) {
+                    print(r.value(), sb, depth + 1);
+                }
+            }
+            case Statement.VarDeclGroup g -> {
+                sb.append("VarDeclGroup(").append(g.decls().size()).append(")\n");
+                for (Statement.VarDecl d : g.decls()) {
+                    print(d, sb, depth + 1);
+                }
+            }
         }
     }
 
@@ -172,5 +266,9 @@ public class AstPrinter {
             case XOR           -> "xor";
             default            -> op.name();
         };
+    }
+
+    private static void indent(StringBuilder sb, int depth) {
+        sb.repeat("  ", depth);
     }
 }

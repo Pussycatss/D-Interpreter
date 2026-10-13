@@ -154,9 +154,9 @@ public final class Parser {
         consume(TokenType.LOOP, "Expected 'loop' after condition of 'while'");
 
         loopDepth++;
-        List<Statement> body;
+        Statement.Block body;
         try {
-            body = parseBody();
+            body = parseBodyBlock();
         } finally {
             loopDepth--;
         }
@@ -167,9 +167,9 @@ public final class Parser {
     private Statement parseLoop() {
         Token open = previous();
         loopDepth++;
-        List<Statement> body;
+        Statement.Block body;
         try {
-            body = parseBody();
+            body = parseBodyBlock();
         } finally {
             loopDepth--;
         }
@@ -183,9 +183,9 @@ public final class Parser {
         if (check(TokenType.LOOP)) {
             advance();
             loopDepth++;
-            List<Statement> body;
+            Statement.Block body;
             try {
-                body = parseBody();
+                body = parseBodyBlock();
             } finally {
                 loopDepth--;
             }
@@ -205,9 +205,9 @@ public final class Parser {
             Expression to = parseExpression();
             consume(TokenType.LOOP, "Expected 'loop' in 'for'");
             loopDepth++;
-            List<Statement> body;
+            Statement.Block body;
             try {
-                body = parseBody();
+                body = parseBodyBlock();
             } finally {
                 loopDepth--;
             }
@@ -217,9 +217,9 @@ public final class Parser {
 
         consume(TokenType.LOOP, "Expected 'loop' in 'for'");
         loopDepth++;
-        List<Statement> body;
+        Statement.Block body;
         try {
-            body = parseBody();
+            body = parseBodyBlock();
         } finally {
             loopDepth--;
         }
@@ -472,6 +472,10 @@ public final class Parser {
         if (got.type() != TokenType.IDENTIFIER) return null;
         String close = closestIn(got.lexeme(), TYPE_KEYWORDS);
         return close == null ? null : "did you mean '" + close + "'?";
+    }
+
+    private Statement.Block parseBodyBlock() {
+        return new Statement.Block(parseBody());
     }
 
     private void requireStatementSeparator(TokenType... terminators) {

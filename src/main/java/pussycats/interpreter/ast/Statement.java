@@ -10,10 +10,10 @@ public sealed interface Statement extends Node {
     record PrintStatement(List<Expression> values)                                             implements Statement {}
 
     record IfStatement(Expression cond, Statement then, Statement otherwise)                   implements Statement {} // otherwise may be null
-    record WhileStatement(Expression cond, List<Statement> body)                               implements Statement {}
-    record LoopStatement(List<Statement> body)                                                 implements Statement {}
-    record ForRangeStatement(String var, Expression from, Expression to, List<Statement> body) implements Statement {} // var may be null
-    record ForInStatement(String var, Expression iterable, List<Statement> body)               implements Statement {}
+    record WhileStatement(Expression cond, Statement.Block body)                               implements Statement {}
+    record LoopStatement(Statement.Block body)                                                 implements Statement {}
+    record ForRangeStatement(String var, Expression from, Expression to, Statement.Block body) implements Statement {} // var may be null
+    record ForInStatement(String var, Expression iterable, Statement.Block body)               implements Statement {}
     record ExitStatement()                                                                     implements Statement {}
     record ReturnStatement(Expression value)                                                   implements Statement {} // value may be null
 
