@@ -15,3 +15,8 @@ print "Absolute of -5:", absolute(-5)
 // Higher-order: lambda that takes a lambda
 var apply_twice := func(f, val) => f(f(val))
 print "Double square of 3:", apply_twice(square, 3)
+
+var f := func(n) is
+    if n < 0 => return -n
+    return n
+end
