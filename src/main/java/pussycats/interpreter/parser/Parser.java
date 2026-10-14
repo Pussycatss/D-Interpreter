@@ -152,9 +152,7 @@ public final class Parser {
             if (match(TokenType.ASSIGN)) {
                 init = parseExpression();
             } else if (check(TokenType.EQUAL)) {
-                throw panic(peek(),
-                        "Expected ':=' after variable name",
-                        "did you mean ':=' instead of '='?");
+                throw panic(peek(), "Expected ':=' after variable name", null);
             }
             decls.add(new Statement.VarDecl(name.lexeme(), init));
         } while (match(TokenType.COMMA));
@@ -467,8 +465,7 @@ public final class Parser {
                     advance();
                     entries.add(new Expression.TupleEntry(name, parseExpression()));
                 } else if (check(TokenType.IDENTIFIER) && peekAt(1).type() == TokenType.EQUAL) {
-                    throw panic(peekAt(1), "Expected ':=' after tuple element name",
-                            "did you mean ':=' instead of '='?");
+                    throw panic(peekAt(1), "Expected ':=' after tuple element name", null);
                 } else {
                     entries.add(new Expression.TupleEntry(null, parseExpression()));
                 }
@@ -503,7 +500,7 @@ public final class Parser {
         }
         throw panic(peek(),
                 "Expected '=>' or 'is' in function literal",
-                "the 'func' at line " + funcTok.line()
+                "the 'func' at " + pos(funcTok)
                         + " needs a body: either '=> expr' or 'is ... end'");
     }
 
@@ -544,9 +541,10 @@ public final class Parser {
     private void closeDelimiter(TokenType expected, Token openTok, String closer, String what) {
         if (match(expected)) return;
         Token got = peek();
-        throw panic(got, "Expected '" + closer + "' to close " + what + " opened at line " + openTok.line(),
-                closer.equals(")") ? "check for a missing ')' in the expression"
-                        : "check for a missing '" + closer + "' before this point");
+        throw panic(got,
+                "unclosed '" + openTok.lexeme() + "' in " + what,
+                "the '" + openTok.lexeme() + "' at " + pos(openTok)
+                        + " has no matching '" + closer + "'");
     }
 
     private static final List<String> TYPE_KEYWORDS = List.of("int", "real", "bool", "string", "none", "func");
@@ -571,8 +569,7 @@ public final class Parser {
             return;
         }
         Token got = peek();
-        throw panic(got, "Expected a newline or ';' between statements",
-                "did you forget an operator, or a separator between two statements?");
+        throw panic(got, "Expected a newline or ';' between statements", null);
     }
 
     /** True if the current token ends a statement (separator, {@code end}, {@code else} or end of input). */
@@ -589,13 +586,12 @@ public final class Parser {
      * the construct was opened.
      */
     private void consumeEnd(String constructName, Token openTok) {
-        if (match(TokenType.END)) {
-            return;
-        }
+        if (match(TokenType.END)) return;
         Token got = peek();
-        String message = "Expected 'end' to close the '" + constructName
-                + "' opened at line " + openTok.line();
-        throw panic(got, message, "check for a missing 'end' or mismatched nesting");
+        throw panic(got,
+                "unclosed '" + constructName + "'",
+                "the '" + constructName + "' at " + pos(openTok)
+                        + " needs a matching 'end'");
     }
 
     private void skipToCommaOrClose(TokenType closer) {
@@ -629,6 +625,10 @@ public final class Parser {
     // ============================================================
     // Token helpers
     // ============================================================
+
+    private static String pos(Token t) {
+        return t.line() + ":" + t.column();
+    }
 
     private Token peek() {
         return tokens.get(current);
@@ -736,13 +736,20 @@ public final class Parser {
      * @param suggestion optional hint such as "did you mean ...?", may be {@code null}
      */
     private ParsePanic panic(Token at, String message, String suggestion) {
-        String full = message + " (found " + describe(at) + ")";
-        reporter.report(full, suggestion, at.line(), at.column());
+        int len = switch (at.type()) {
+            case EOF, NEWLINE -> 1;
+            default -> Math.max(1, at.lexeme().length());
+        };
+        reporter.report(message, suggestion, at.line(), at.column(), len);
         return new ParsePanic();
     }
 
     private String describe(Token t) {
-        return t.type() == TokenType.EOF ? "end of input" : "'" + t.lexeme() + "'";
+        return switch (t.type()) {
+            case EOF -> "end of input";
+            case NEWLINE -> "end of line";
+            default -> "'" + t.lexeme() + "'";
+        };
     }
 
     // ============================================================

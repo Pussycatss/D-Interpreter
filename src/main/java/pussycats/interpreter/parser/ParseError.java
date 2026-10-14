@@ -1,20 +1,18 @@
 package pussycats.interpreter.parser;
 
-public record ParseError(String message, String suggestion, String source, String filename, int line, int column) {
+public record ParseError(String message, String suggestion, String source,
+                         String filename, int line, int column, int length) {
     public String format() {
         StringBuilder sb = new StringBuilder();
         sb.append(" File \"").append(filename).append("\", line ").append(line).append('\n');
-
         String srcLine = lineOf(line);
         sb.append("    ").append(expandTabs(srcLine)).append('\n');
-        sb.append("    ").repeat(" ", displayColumn(srcLine, column)).append("^\n");
-
+        sb.append("    ").repeat(" ", displayColumn(srcLine, column));
+        sb.repeat("^", Math.max(1, length)).append('\n');
         sb.append("SyntaxError: ").append(message);
-
         if (suggestion != null && !suggestion.isBlank()) {
             sb.append('\n').append("  hint: ").append(suggestion);
         }
-
         return sb.toString();
     }
 
