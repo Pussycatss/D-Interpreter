@@ -21,6 +21,7 @@ public class REPL {
     private Evaluable createHandler(String type) {
         return switch (type) {
             case "lexer" -> new LexerEval();
+            case "parser" -> new ParserEval();
             default -> throw new IllegalArgumentException("Unknown type: " + type);
         };
     }

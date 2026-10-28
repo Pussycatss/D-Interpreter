@@ -18,14 +18,14 @@ public final class ErrorReporter {
     }
 
     public void report(String message, int line, int column) {
-        report(message, null, line, column);
+        report(message, null, line, column, 1);
     }
 
-    public void report(String message, String suggestion, int line, int column) {
+    public void report(String message, String suggestion, int line, int column, int length) {
         if (tooManyErrors()) {
             return;
         }
-        errors.add(new ParseError(message, suggestion, source, filename, line, column));
+        errors.add(new ParseError(message, suggestion, source, filename, line, column, length));
     }
 
     public boolean hasErrors() {
