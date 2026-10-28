@@ -10,6 +10,7 @@ public enum TokenType {
     INTEGER,
     REAL,
     STRING,
+    BOOLEAN,
 
     // Identifiers
     IDENTIFIER,
@@ -33,9 +34,9 @@ public enum TokenType {
     FALSE,
     NONE,
 
-    INT,
+    INT_TYPE,
     REAL_TYPE,
-    BOOL,
+    BOOL_TYPE,
     STRING_TYPE,
 
     AND,
@@ -47,7 +48,7 @@ public enum TokenType {
     // Operators
     PLUS,
     MINUS,
-    STAR,
+    ASTERISK,
     SLASH,
 
     LESS,

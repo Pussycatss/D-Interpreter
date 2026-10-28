@@ -50,8 +50,8 @@ class LexerTest {
     }
 
     @Test void typeIndicators() {
-        assertEquals(List.of(TokenType.INT, TokenType.REAL_TYPE,
-                        TokenType.BOOL, TokenType.STRING_TYPE),
+        assertEquals(List.of(TokenType.INT_TYPE, TokenType.REAL_TYPE,
+                        TokenType.BOOL_TYPE, TokenType.STRING_TYPE),
                 types("int real bool string"));
     }
 

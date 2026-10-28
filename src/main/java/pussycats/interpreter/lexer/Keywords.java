@@ -1,6 +1,8 @@
 package pussycats.interpreter.lexer;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -8,7 +10,7 @@ import java.util.Map;
  * <p>
  * Contains all keywords and their mapping to {@link TokenType}.
  */
-final class Keywords {
+public final class Keywords {
     private static final Map<String, TokenType> KEYWORDS = new HashMap<>();
 
     static {
@@ -33,9 +35,9 @@ final class Keywords {
         KEYWORDS.put("none", TokenType.NONE);
 
         // type indicators
-        KEYWORDS.put("int", TokenType.INT);
+        KEYWORDS.put("int", TokenType.INT_TYPE);
         KEYWORDS.put("real", TokenType.REAL_TYPE);
-        KEYWORDS.put("bool", TokenType.BOOL);
+        KEYWORDS.put("bool", TokenType.BOOL_TYPE);
         KEYWORDS.put("string", TokenType.STRING_TYPE);
 
         // logical operators
@@ -47,6 +49,10 @@ final class Keywords {
     }
 
     private Keywords() {
+    }
+
+    public static List<String> getKeywords() {
+        return new ArrayList<>(KEYWORDS.keySet());
     }
 
     /** Returns the keyword TokenType for {@code text}, or {@code null} if it's not a keyword. */
