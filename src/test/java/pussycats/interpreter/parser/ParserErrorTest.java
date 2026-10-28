@@ -2,7 +2,6 @@ package pussycats.interpreter.parser;
 
 import org.junit.jupiter.api.Test;
 import pussycats.interpreter.ast.Node;
-import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.lexer.Lexer;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -58,7 +57,7 @@ class ParserErrorTest {
     }
 
     @Test void missingSeparatorBetweenStatements() {
-        assertTrue(errors("print 1 print 2").toLowerCase().contains("separator"));
+        assertTrue(errors("print 1 print 2").contains("between statements"));
     }
 
     @Test void relationIsNotAssociative() {
