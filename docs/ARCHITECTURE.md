@@ -27,6 +27,10 @@ interpreter/
 │   ├── Expression.java
 │   └── Program.java
 │
+├── semantic/
+│   ├── Optimizer.java
+│   └── SemanticAnalyzer.java
+│
 └── runtime/
     ├── Interpreter.java
     └── Cell.java
@@ -36,4 +40,5 @@ interpreter/
 - lexer – Lexical analyzer. Includes token types and keywords registry, tokenizer and scanner. Handles lexical errors.
 - parser – Syntax analyzer. Includes parser and parser errors.
 - ast – Abstract syntax tree. Includes AST. Builds tree from tokens.
-- runtime – Runtime environment. Includes interpreter and cell. Cells proposed to resolve closures in capture-by-reference model
+- runtime – Runtime environment. Includes interpreter and cell. Cells proposed to resolve closures in capture-by-reference model.
+- semantic – Semantic analyzer. Performs analysis and optimization after parsing and before execution.
