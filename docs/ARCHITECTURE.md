@@ -29,7 +29,7 @@ interpreter/
 │
 ├── semantic/
 │   ├── Optimizer.java
-│   └── SemanticAnalyzer.java
+│   └── Analyzer.java
 │
 └── runtime/
     ├── Interpreter.java

@@ -6,13 +6,13 @@ import pussycats.interpreter.ast.Statement;
 
 import java.util.*;
 
-public class SemanticAnalyzer {
+public class Analyzer {
 
     public final List<String> errors = new ArrayList<>();
     private final Deque<Set<String>> scopes = new ArrayDeque<>();
     private int loopDepth = 0;
 
-    public SemanticAnalyzer() {
+    public Analyzer() {
         scopes.push(new HashSet<>());
     }
 
