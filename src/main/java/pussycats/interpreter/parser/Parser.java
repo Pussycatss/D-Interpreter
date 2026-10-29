@@ -4,6 +4,7 @@ import pussycats.interpreter.ast.Expression;
 import pussycats.interpreter.ast.Node;
 import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.ast.TypeIndicator;
+import pussycats.interpreter.error.ErrorReporter;
 import pussycats.interpreter.lexer.Token;
 import pussycats.interpreter.lexer.TokenType;
 import pussycats.interpreter.lexer.Keywords;
@@ -39,7 +40,7 @@ public final class Parser {
 
     public Parser(List<Token> tokens, String source, String filename) {
         this.tokens = tokens;
-        this.reporter = new ErrorReporter(source, filename);
+        this.reporter = new ErrorReporter(source, filename, "SyntaxError");
     }
 
     public boolean hasErrors() {
