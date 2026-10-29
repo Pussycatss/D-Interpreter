@@ -17,8 +17,7 @@ interpreter/
 │   └── LexerException.java
 │
 ├── parser/
-│   ├── Parser.java
-│   └── ParserException.java
+│   └── Parser.java
 │
 ├── ast/
 │   ├── Node.java
