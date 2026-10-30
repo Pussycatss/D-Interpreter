@@ -1,7 +1,7 @@
-package pussycats.interpreter.parser;
+package pussycats.interpreter.error;
 
-public record ParseError(String message, String suggestion, String source,
-                         String filename, int line, int column, int length) {
+public record DiagnosticError(String message, String suggestion, String source,
+                              String filename, int line, int column, int length, String errorType) {
     public String format() {
         StringBuilder sb = new StringBuilder();
         sb.append(" File \"").append(filename).append("\", line ").append(line).append('\n');
@@ -9,7 +9,7 @@ public record ParseError(String message, String suggestion, String source,
         sb.append("    ").append(expandTabs(srcLine)).append('\n');
         sb.append("    ").repeat(" ", displayColumn(srcLine, column));
         sb.repeat("^", Math.max(1, length)).append('\n');
-        sb.append("SyntaxError: ").append(message);
+        sb.append(errorType).append(": ").append(message);
         if (suggestion != null && !suggestion.isBlank()) {
             sb.append('\n').append("  hint: ").append(suggestion);
         }
