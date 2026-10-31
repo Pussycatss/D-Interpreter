@@ -8,7 +8,7 @@ import picocli.CommandLine;
  */
 public final class Main {
 
-    public static void main(String[] args) {
+    static void main(String[] args) {
         int exitCode = new CommandLine(new CommandLineArgs()).execute(args);
         System.exit(exitCode);
     }
