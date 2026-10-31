@@ -60,6 +60,7 @@ public class CommandLineArgs implements Callable<Integer> {
             return 0;
         }
 
+        // No file, no -c: drop into the REPL.
         new REPL(optimizerMode ? "optimizer" : "parser");
         return 0;
     }
@@ -77,6 +78,7 @@ public class CommandLineArgs implements Callable<Integer> {
     }
 
     private void run(String source, String sourceName, boolean dumpTokens, boolean dumpAst) {
+        // ---- Lexer ----
         List<Token> tokens = new Lexer(source, sourceName).scan();
 
         if (dumpTokens) {
@@ -87,6 +89,7 @@ public class CommandLineArgs implements Callable<Integer> {
             System.out.println();
         }
 
+        // ---- Parser ----
         Parser parser = new Parser(tokens, source, sourceName);
         Node ast = parser.parse();
 
@@ -101,6 +104,7 @@ public class CommandLineArgs implements Callable<Integer> {
             System.out.println(new AstPrinter().print(ast));
         }
 
+        // ---- Analyzer ----
         Analyzer analyzer = new Analyzer();
         analyzer.analyze(ast);
 
@@ -113,6 +117,7 @@ public class CommandLineArgs implements Callable<Integer> {
             return;
         }
 
+        // ---- Optimizer ----
         Optimizer optimizer = new Optimizer();
         Node optimizedAst = optimizer.runFullOptimization(ast);
 
@@ -126,5 +131,7 @@ public class CommandLineArgs implements Callable<Integer> {
             System.out.println("=== Optimized AST ===");
             System.out.println(new AstPrinter().print(optimizedAst));
         }
+
+        // TODO: interpretation
     }
 }
