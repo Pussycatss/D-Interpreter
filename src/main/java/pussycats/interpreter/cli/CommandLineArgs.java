@@ -9,6 +9,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 import pussycats.interpreter.semantic.Optimizer;
+import pussycats.interpreter.semantic.Analyzer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -59,7 +60,6 @@ public class CommandLineArgs implements Callable<Integer> {
             return 0;
         }
 
-        // No file, no -c: drop into the REPL.
         new REPL(optimizerMode ? "optimizer" : "parser");
         return 0;
     }
@@ -77,7 +77,6 @@ public class CommandLineArgs implements Callable<Integer> {
     }
 
     private void run(String source, String sourceName, boolean dumpTokens, boolean dumpAst) {
-        // ---- Lexer ----
         List<Token> tokens = new Lexer(source, sourceName).scan();
 
         if (dumpTokens) {
@@ -88,7 +87,6 @@ public class CommandLineArgs implements Callable<Integer> {
             System.out.println();
         }
 
-        // ---- Parser ----
         Parser parser = new Parser(tokens, source, sourceName);
         Node ast = parser.parse();
 
@@ -103,12 +101,18 @@ public class CommandLineArgs implements Callable<Integer> {
             System.out.println(new AstPrinter().print(ast));
         }
 
-        // ---- Analyzer ----
-//        TODO: finalize analyzer
-//        SemanticAnalyzer analyzer = new SemanticAnalyzer();
-//        analyzer.analyze(ast);
+        Analyzer analyzer = new Analyzer();
+        analyzer.analyze(ast);
 
-        // ---- Optimizer ----
+        if (!analyzer.errors.isEmpty()) {
+            System.err.println("=== Semantic Errors ===");
+            for (String error : analyzer.errors) {
+                System.err.println(error);
+            }
+            System.exit(1);
+            return;
+        }
+
         Optimizer optimizer = new Optimizer();
         Node optimizedAst = optimizer.runFullOptimization(ast);
 
@@ -122,7 +126,5 @@ public class CommandLineArgs implements Callable<Integer> {
             System.out.println("=== Optimized AST ===");
             System.out.println(new AstPrinter().print(optimizedAst));
         }
-
-        // TODO: interpretation
     }
 }
