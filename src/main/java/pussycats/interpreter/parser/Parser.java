@@ -35,8 +35,6 @@ public final class Parser {
     private final List<Token> tokens;
     private final ErrorReporter reporter;
     private int current = 0;
-    /** Nesting level of loops, used to check that {@code exit} is inside a loop. */
-    private int loopDepth = 0;
 
     public Parser(List<Token> tokens, String source, String filename) {
         this.tokens = tokens;
@@ -204,27 +202,14 @@ public final class Parser {
         Token open = previous();
         Expression cond = parseExpression();
         consume(TokenType.LOOP, "Expected 'loop' after condition of 'while'");
-
-        loopDepth++;
-        Statement.Block body;
-        try {
-            body = parseBodyBlock();
-        } finally {
-            loopDepth--;
-        }
+        Statement.Block body = parseBodyBlock();
         consumeEnd("while", open);
         return new Statement.WhileStatement(cond, body);
     }
 
     private Statement parseLoop() {
         Token open = previous();
-        loopDepth++;
-        Statement.Block body;
-        try {
-            body = parseBodyBlock();
-        } finally {
-            loopDepth--;
-        }
+        Statement.Block body = parseBodyBlock();
         consumeEnd("loop", open);
         return new Statement.LoopStatement(body);
     }
@@ -242,13 +227,7 @@ public final class Parser {
 
         if (check(TokenType.LOOP)) {
             advance();
-            loopDepth++;
-            Statement.Block body;
-            try {
-                body = parseBodyBlock();
-            } finally {
-                loopDepth--;
-            }
+            Statement.Block body = parseBodyBlock();
             consumeEnd("for", open);
             return new Statement.LoopStatement(body);
         }
@@ -264,34 +243,19 @@ public final class Parser {
         if (match(TokenType.RANGE)) {
             Expression to = parseExpression();
             consume(TokenType.LOOP, "Expected 'loop' in 'for'");
-            loopDepth++;
-            Statement.Block body;
-            try {
-                body = parseBodyBlock();
-            } finally {
-                loopDepth--;
-            }
+            Statement.Block body = parseBodyBlock();
             consumeEnd("for", open);
             return new Statement.ForRangeStatement(var, first, to, body);
         }
 
         consume(TokenType.LOOP, "Expected 'loop' in 'for'");
-        loopDepth++;
-        Statement.Block body;
-        try {
-            body = parseBodyBlock();
-        } finally {
-            loopDepth--;
-        }
+        Statement.Block body = parseBodyBlock();
         consumeEnd("for", open);
         return new Statement.ForInStatement(var, first, body);
     }
 
-    /** {@code exit} is only allowed inside a loop. */
+    /** {@code exit} statement. */
     private Statement parseExit() {
-        if (loopDepth == 0) {
-            throw error(previous(), "'exit' can only appear inside a loop");
-        }
         return new Statement.ExitStatement();
     }
 
