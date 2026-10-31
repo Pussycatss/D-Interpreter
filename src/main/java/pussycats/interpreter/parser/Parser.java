@@ -162,8 +162,8 @@ public final class Parser {
 
     private Statement parsePrint() {
         List<Expression> values = new ArrayList<>();
-        values.add(parseExpression());
-        while (match(TokenType.COMMA)) values.add(parseExpression());
+        do values.add(parseExpression());
+        while (match(TokenType.COMMA));
         return new Statement.PrintStatement(values);
     }
 
@@ -378,10 +378,9 @@ public final class Parser {
                 Token open = previous();
                 List<Expression> args = new ArrayList<>();
                 if (!check(TokenType.RPAREN)) {
-                    args.add(parseExpression());
-                    while (match(TokenType.COMMA)) {
+                    do {
                         args.add(parseExpression());
-                    }
+                    } while (match(TokenType.COMMA));
                 }
                 closeDelimiter(TokenType.RPAREN, open, ")", "argument list");
                 expr = new Expression.Call(expr, args);
@@ -447,10 +446,9 @@ public final class Parser {
     private Expression parseArrayLit(Token open) {
         List<Expression> elems = new ArrayList<>();
         if (!check(TokenType.RBRACKET)) {
-            elems.add(parseExpression());
-            while (match(TokenType.COMMA)) {
+            do {
                 elems.add(parseExpression());
-            }
+            } while (match(TokenType.COMMA));
         }
         closeDelimiter(TokenType.RBRACKET, open, "]", "array literal");
         return new Expression.ArrayLit(elems);
@@ -483,10 +481,9 @@ public final class Parser {
         if (match(TokenType.LPAREN)) {
             Token open = previous();
             if (!check(TokenType.RPAREN)) {
-                params.add(consume(TokenType.IDENTIFIER, "Expected parameter name").lexeme());
-                while (match(TokenType.COMMA)) {
+                do {
                     params.add(consume(TokenType.IDENTIFIER, "Expected parameter name").lexeme());
-                }
+                } while (match(TokenType.COMMA));
             }
             closeDelimiter(TokenType.RPAREN, open, ")", "parameter list");
         }
