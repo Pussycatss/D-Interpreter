@@ -162,8 +162,7 @@ public class AstPrinter {
                 // "=> expr" form or "is ... end" block form
                 switch (f.body()) {
                     case Expression e -> sb.append("=>\n");
-                    case Statement.Block b -> sb.append("is ").append(b.statements().size())
-                            .append(b.statements().size() == 1 ? " stmt" : " stmts").append(" end\n");
+                    case Statement.Block b -> sb.append("is\n");
                     default -> sb.append("???\n");
                 }
                 print(f.body(), sb, depth + 1);
