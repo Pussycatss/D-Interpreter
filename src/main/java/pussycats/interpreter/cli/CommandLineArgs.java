@@ -5,10 +5,10 @@ import pussycats.interpreter.ast.Node;
 import pussycats.interpreter.lexer.Lexer;
 import pussycats.interpreter.lexer.Token;
 import pussycats.interpreter.parser.Parser;
-import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
+import pussycats.interpreter.semantic.Optimizer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,6 +31,9 @@ public class CommandLineArgs implements Callable<Integer> {
 
     @Option(names = {"-c", "--code"}, description = "Execute program passed as a string")
     private String code = null;
+
+    @Option(names = {"-o", "--optimizer"}, description = "Run REPL with optimizer (shows before/after AST)")
+    private boolean optimizerMode = false;
 
     @Parameters(index = "0", description = "Script file to execute", arity = "0..1")
     private String file = null;
@@ -57,7 +60,7 @@ public class CommandLineArgs implements Callable<Integer> {
         }
 
         // No file, no -c: drop into the REPL.
-        new REPL("parser");
+        new REPL(optimizerMode ? "optimizer" : "parser");
         return 0;
     }
 
@@ -100,6 +103,26 @@ public class CommandLineArgs implements Callable<Integer> {
             System.out.println(new AstPrinter().print(ast));
         }
 
-        // TODO: semantic analysis + interpretation
+        // ---- Analyzer ----
+//        TODO: finalize analyzer
+//        SemanticAnalyzer analyzer = new SemanticAnalyzer();
+//        analyzer.analyze(ast);
+
+        // ---- Optimizer ----
+        Optimizer optimizer = new Optimizer();
+        Node optimizedAst = optimizer.runFullOptimization(ast);
+
+        if (optimizedAst == null) {
+            System.err.println("Optimizer failed to optimize AST");
+            System.exit(1);
+            return;
+        }
+
+        if (dumpAst) {
+            System.out.println("=== Optimized AST ===");
+            System.out.println(new AstPrinter().print(optimizedAst));
+        }
+
+        // TODO: interpretation
     }
 }
