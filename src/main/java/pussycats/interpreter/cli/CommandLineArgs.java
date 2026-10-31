@@ -105,14 +105,11 @@ public class CommandLineArgs implements Callable<Integer> {
         }
 
         // ---- Analyzer ----
-        Analyzer analyzer = new Analyzer();
+        Analyzer analyzer = new Analyzer(source, sourceName);
         analyzer.analyze(ast);
 
-        if (!analyzer.errors.isEmpty()) {
-            System.err.println("=== Semantic Errors ===");
-            for (String error : analyzer.errors) {
-                System.err.println(error);
-            }
+        if (analyzer.hasErrors()) {
+            System.err.print(analyzer.formatErrors());
             System.exit(1);
             return;
         }

@@ -2,13 +2,15 @@ package pussycats.interpreter.semantic;
 
 import pussycats.interpreter.ast.Expression;
 import pussycats.interpreter.ast.Node;
+import pussycats.interpreter.ast.SourceLocation;
 import pussycats.interpreter.ast.Statement;
+import pussycats.interpreter.error.ErrorReporter;
 
 import java.util.*;
 
 public class Analyzer {
 
-    public final List<String> errors = new ArrayList<>();
+    public final ErrorReporter reporter;
     private final Deque<Scope> scopes = new ArrayDeque<>();
     private int loopDepth = 0;
     private int functionDepth = 0;
@@ -17,8 +19,17 @@ public class Analyzer {
         final Set<String> names = new HashSet<>();
     }
 
-    public Analyzer() {
+    public Analyzer(String source, String filename) {
+        this.reporter = new ErrorReporter(source, filename, "SemanticError");
         scopes.push(new Scope());
+    }
+
+    public boolean hasErrors() {
+        return reporter.hasErrors();
+    }
+
+    public String formatErrors() {
+        return reporter.formatAll();
     }
 
     public void analyze(Node node) {
@@ -88,7 +99,7 @@ public class Analyzer {
                 }
             }
             case Statement.Assign a -> {
-                checkAssignmentTarget(a.target());
+                checkAssignmentTarget(a.target(), a.loc());
                 analyze(a.target());
                 analyze(a.value());
             }
@@ -117,7 +128,7 @@ public class Analyzer {
 
                 scopes.push(new Scope());
                 if (f.params() != null) {
-                    f.params().forEach(param -> currentScope().names.add(param));
+                    f.params().forEach(param -> currentScope().names.add(param.name()));
                 }
                 analyze(f.body());
                 scopes.pop();
@@ -150,10 +161,16 @@ public class Analyzer {
         return null;
     }
 
+    // ==========================================
+    // Semantic Checks
+    // ==========================================
+
     private void checkVariableDeclaration(Statement.VarDecl v) {
         Scope scope = currentScope();
         if (scope.names.contains(v.name())) {
-            errors.add("Duplicate declaration: Variable '" + v.name() + "' is already defined in this scope.");
+            SourceLocation loc = v.loc() != null ? v.loc() : SourceLocation.UNKNOWN;
+            reporter.report("Duplicate declaration: Variable '" + v.name() + "' is already defined in this scope.",
+                    null, loc.line(), loc.column(), v.name().length());
             return;
         }
         scope.names.add(v.name());
@@ -161,28 +178,35 @@ public class Analyzer {
 
     private void checkVariableUsage(Expression.Ident i) {
         if (findScope(i.name()) == null) {
-            errors.add("Semantic error: Identifier '" + i.name() + "' is used before declaration.");
+            SourceLocation loc = i.loc() != null ? i.loc() : SourceLocation.UNKNOWN;
+            reporter.report("Undeclared variable: '" + i.name() + "'",
+                    null, loc.line(), loc.column(), i.name().length());
         }
     }
 
     private void checkExitStatement(Statement.ExitStatement e) {
         if (loopDepth <= 0) {
-            errors.add("Invalid usage: 'exit' statement is only allowed inside loops.");
+            SourceLocation loc = e.loc() != null ? e.loc() : SourceLocation.UNKNOWN;
+            reporter.report("'exit' can only appear inside a loop",
+                    null, loc.line(), loc.column(), 4);
         }
     }
 
     private void checkReturnStatement(Statement.ReturnStatement r) {
         if (functionDepth <= 0) {
-            errors.add("Invalid usage: 'return' statement is only allowed inside functions.");
+            SourceLocation loc = r.loc() != null ? r.loc() : SourceLocation.UNKNOWN;
+            reporter.report("'return' can only appear inside a function",
+                    null, loc.line(), loc.column(), 6);
         }
     }
 
-    private void checkAssignmentTarget(Expression target) {
+    private void checkAssignmentTarget(Expression target, SourceLocation loc) {
         if (!(target instanceof Expression.Ident
                 || target instanceof Expression.Index
                 || target instanceof Expression.Field
                 || target instanceof Expression.FieldIndex)) {
-            errors.add("Invalid assignment target: Left-hand side of assignment must be a reference.");
+            reporter.report("Invalid assignment target: Left-hand side of assignment must be a reference.",
+                    null, loc.line(), loc.column(), 1);
         }
     }
 
@@ -191,9 +215,12 @@ public class Analyzer {
             return;
         }
         Set<String> seenParams = new HashSet<>();
-        for (String param : f.params()) {
-            if (!seenParams.add(param)) {
-                errors.add("Duplicate function parameter: '" + param + "' is defined multiple times.");
+        for (Expression.Parameter param : f.params()) {
+            if (!seenParams.add(param.name())) {
+                SourceLocation loc = param.loc();
+                reporter.report("Duplicate function parameter: '" + param.name() +
+                                "' is defined multiple times.", null, loc.line(), loc.column(),
+                                param.name().length());
             }
         }
     }
@@ -205,7 +232,9 @@ public class Analyzer {
         Set<String> seenKeys = new HashSet<>();
         for (Expression.TupleEntry entry : t.entries()) {
             if (entry.name() != null && !seenKeys.add(entry.name())) {
-                errors.add("Duplicate tuple key: '" + entry.name() + "' is defined multiple times.");
+                SourceLocation loc = entry.loc();
+                reporter.report("Duplicate tuple key: '" + entry.name() + "' is defined multiple times.",
+                        null, loc.line(), loc.column(), entry.name().length());
             }
         }
     }
