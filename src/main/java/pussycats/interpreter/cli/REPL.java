@@ -22,6 +22,7 @@ public class REPL {
         return switch (type) {
             case "lexer" -> new LexerEval();
             case "parser" -> new ParserEval();
+            case "optimizer" -> new OptimizerEval();
             default -> throw new IllegalArgumentException("Unknown type: " + type);
         };
     }
