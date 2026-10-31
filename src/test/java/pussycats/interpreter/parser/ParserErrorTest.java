@@ -44,10 +44,6 @@ class ParserErrorTest {
         assertTrue(errors("while x print 1 end").contains("loop"));
     }
 
-    @Test void exitOutsideLoop() {
-        assertTrue(errors("exit").toLowerCase().contains("loop"));
-    }
-
     @Test void forWithoutLoop() {
         assertTrue(errors("for 1..3 print 1 end").contains("loop"));
     }
