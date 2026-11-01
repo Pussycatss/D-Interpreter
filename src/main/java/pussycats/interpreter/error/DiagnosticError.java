@@ -4,7 +4,7 @@ public record DiagnosticError(String message, String suggestion, String source,
                               String filename, int line, int column, int length, String errorType) {
     public String format() {
         StringBuilder sb = new StringBuilder();
-        sb.append(" File \"").append(filename).append("\", line ").append(line).append('\n');
+        sb.append("File \"").append(filename).append("\", line ").append(line).append('\n');
         String srcLine = lineOf(line);
         sb.append("    ").append(expandTabs(srcLine)).append('\n');
         sb.append("    ").repeat(" ", displayColumn(srcLine, column));

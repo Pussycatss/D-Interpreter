@@ -266,7 +266,7 @@ class OptimizerTest {
     void deadCodeAfterExit() {
         var block = optimize("loop exit; print 1 end");
         assertEquals(1, block.statements().size());
-        var loop = assertInstanceOf(Statement.LoopStatement.class, block.statements().get(0));
+        var loop = assertInstanceOf(Statement.LoopStatement.class, block.statements().getFirst());
         assertEquals(1, loop.body().statements().size());
         assertInstanceOf(Statement.ExitStatement.class, loop.body().statements().getFirst());
     }
@@ -276,7 +276,7 @@ class OptimizerTest {
     void deadCodeAfterTerminatingIf() {
         var block = optimize("if x then return else return end; print 1");
         assertEquals(1, block.statements().size());
-        assertInstanceOf(Statement.IfStatement.class, block.statements().get(0));
+        assertInstanceOf(Statement.IfStatement.class, block.statements().getFirst());
     }
 
     /* ============ unused variable removal ============ */
@@ -286,7 +286,7 @@ class OptimizerTest {
     void unusedVariableWithPureInitRemoved() {
         var block = optimize("var x := 5; print 1");
         assertEquals(1, block.statements().size());
-        assertInstanceOf(Statement.PrintStatement.class, block.statements().get(0));
+        assertInstanceOf(Statement.PrintStatement.class, block.statements().getFirst());
     }
 
     @Test
@@ -313,7 +313,7 @@ class OptimizerTest {
     void deadAssignmentRemoved() {
         var block = optimize("x := 5; print 1");
         assertEquals(1, block.statements().size());
-        assertInstanceOf(Statement.PrintStatement.class, block.statements().get(0));
+        assertInstanceOf(Statement.PrintStatement.class, block.statements().getFirst());
     }
 
     @Test
@@ -375,7 +375,7 @@ class OptimizerTest {
         // Second pass: if true then print 1 else ... end → print 1
         var block = optimize("if 3 < 5 then print 1 else print 2 end");
         assertEquals(1, block.statements().size());
-        var stmt = assertInstanceOf(Statement.PrintStatement.class, block.statements().get(0));
+        var stmt = assertInstanceOf(Statement.PrintStatement.class, block.statements().getFirst());
         var val = assertInstanceOf(Expression.IntLit.class, stmt.values().getFirst());
         assertEquals(new BigInteger("1"), val.value());
     }
