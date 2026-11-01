@@ -169,8 +169,8 @@ public class Analyzer {
         Scope scope = currentScope();
         if (scope.names.contains(v.name())) {
             SourceLocation loc = v.loc() != null ? v.loc() : SourceLocation.UNKNOWN;
-            reporter.report("Duplicate declaration: Variable '" + v.name() + "' is already defined in this scope.",
-                    null, loc.line(), loc.column(), v.name().length());
+            reporter.report("Duplicate declaration", "Variable '" + v.name() +
+                            "' is already defined in this scope", loc.line(), loc.column(), v.name().length());
             return;
         }
         scope.names.add(v.name());
@@ -205,8 +205,9 @@ public class Analyzer {
                 || target instanceof Expression.Index
                 || target instanceof Expression.Field
                 || target instanceof Expression.FieldIndex)) {
-            reporter.report("Invalid assignment target: Left-hand side of assignment must be a reference.",
-                    null, loc.line(), loc.column(), 1);
+            reporter.report("Invalid assignment target",
+                    "the left side of ':=' must be a variable, array element, or tuple field",
+                    loc.line(), loc.column(), 1);
         }
     }
 
@@ -218,8 +219,8 @@ public class Analyzer {
         for (Expression.Parameter param : f.params()) {
             if (!seenParams.add(param.name())) {
                 SourceLocation loc = param.loc();
-                reporter.report("Duplicate function parameter: '" + param.name() +
-                                "' is defined multiple times.", null, loc.line(), loc.column(),
+                reporter.report("Duplicate function parameter", "'" + param.name() +
+                                "' is defined multiple times", loc.line(), loc.column(),
                                 param.name().length());
             }
         }
@@ -233,8 +234,8 @@ public class Analyzer {
         for (Expression.TupleEntry entry : t.entries()) {
             if (entry.name() != null && !seenKeys.add(entry.name())) {
                 SourceLocation loc = entry.loc();
-                reporter.report("Duplicate tuple key: '" + entry.name() + "' is defined multiple times.",
-                        null, loc.line(), loc.column(), entry.name().length());
+                reporter.report("Duplicate tuple key", "'" + entry.name() +
+                                "' is defined multiple times", loc.line(), loc.column(), entry.name().length());
             }
         }
     }

@@ -156,18 +156,18 @@ public class AstPrinter {
                     if (i > 0) {
                         sb.append(", ");
                     }
-                    sb.append(f.params().get(i));
+                    sb.append(f.params().get(i).name());
                 }
                 sb.append(") ");
                 // "=> expr" form or "is ... end" block form
                 switch (f.body()) {
-                    case Expression e -> sb.append("=>\n");
-                    case Statement.Block b -> sb.append("is\n");
+                    case Expression ignored -> sb.append("=>\n");
+                    case Statement.Block ignored -> sb.append("is\n");
                     default -> sb.append("???\n");
                 }
                 print(f.body(), sb, depth + 1);
             }
-            case Statement.ExitStatement e -> sb.append("Exit\n");
+            case Statement.ExitStatement ignored -> sb.append("Exit\n");
             case Statement.ExpressionStatement s -> {
                 sb.append("ExpressionStatement\n");
                 print(s.expression(), sb, depth + 1);
