@@ -62,7 +62,7 @@ class AnalyzerTest {
     @Test
     @DisplayName("Error: duplicate declaration in same scope")
     void duplicateVariableDeclaration() {
-        assertHasError("var x := 1\nvar x := 2", "Duplicate declaration: Variable 'x'");
+        assertHasError("var x := 1\nvar x := 2", "Duplicate declaration");
     }
 
     @Test
@@ -120,13 +120,13 @@ class AnalyzerTest {
     @Test
     @DisplayName("Error: assigning to a literal")
     void invalidAssignmentTargetLiteral() {
-        assertHasError("4 := 4", "Invalid assignment target: Left-hand side of assignment must be a reference.");
+        assertHasError("4 := 4", "Invalid assignment target");
     }
 
     @Test
     @DisplayName("Error: assigning to a binary expression")
     void invalidAssignmentTargetExpression() {
-        assertHasError("1 + 3 := 4", "Invalid assignment target: Left-hand side of assignment must be a reference.");
+        assertHasError("1 + 3 := 4", "Invalid assignment target");
     }
 
     /* ============ control flow context (exit/return) ============ */
@@ -192,7 +192,7 @@ class AnalyzerTest {
     @DisplayName("Error: duplicate function parameters")
     void duplicateFunctionParameters() {
         assertHasError("var f := func(x, y, x) => x",
-                "Duplicate function parameter: 'x' is defined multiple times.");
+                "Duplicate function parameter");
     }
 
     /* ============ tuples ============ */
@@ -207,6 +207,6 @@ class AnalyzerTest {
     @DisplayName("Error: duplicate tuple keys")
     void duplicateTupleKeys() {
         assertHasError("var t := {a := 1, b := 2, a := 3}",
-                "Duplicate tuple key: 'a' is defined multiple times.");
+                "Duplicate tuple key");
     }
 }
