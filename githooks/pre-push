@@ -1,0 +1,9 @@
+#!/bin/sh
+echo "▶ Running Maven tests before push..."
+mvn -B -q test
+if [ $? -ne 0 ]; then
+    echo "Tests failed - push aborted."
+    exit 1
+fi
+echo "Tests passed."
+exit 0

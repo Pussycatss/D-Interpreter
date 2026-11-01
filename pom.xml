@@ -49,6 +49,21 @@
                         <release>${java.version}</release>
                     </configuration>
                 </plugin>
+                <plugin>
+                    <groupId>com.github.gantsign.maven</groupId>
+                    <artifactId>git-build-hook-maven-plugin</artifactId>
+                    <version>3.4.1</version>
+                    <configuration>
+                        <hooksDirectory>githooks</hooksDirectory>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>install</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
