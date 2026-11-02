@@ -5,17 +5,17 @@ print unknown_variable
 var x := 1
 var x := 2
 
-// --- 3. ReferenceError (Invalid L-Value) ---
+// --- 3. DeclarationError (Duplicate Params/Keys) ---
+var f := func(a, b, a) => a + b
+var t := {name := "Alice", age := 30, name := "Bob"}
+
+// --- 4. ReferenceError (Invalid L-Value) ---
 5 := 10
 1 + 2 := 3
 
-// --- 4. ContextError ---
+// --- 5. ContextError ---
 exit         // Error: Not inside a loop
 return 42    // Error: Not inside a function
-
-// --- 5. DeclarationError (Duplicates) ---
-var f := func(a, b, a) => a + b
-var t := {name := "Alice", age := 30, name := "Bob"}
 
 // --- 6. NameError (Out of Scope) ---
 if true then
