@@ -20,11 +20,12 @@ interpreter/
 │   └── Parser.java
 │
 ├── ast/
-│   ├── Node.java
-│   ├── Program.java
-│   ├── Statement.java
+│   ├── AstPrinter.java
 │   ├── Expression.java
-│   └── Program.java
+│   ├── Node.java
+│   ├── SourceLocation.java
+│   ├── Statement.java
+│   └── TypeIndicator.java
 │
 ├── semantic/
 │   ├── Optimizer.java
@@ -34,9 +35,17 @@ interpreter/
 │   ├── DiagnosticError.java
 │   └── ErrorReporter.java
 │
-└── runtime/
-    ├── Interpreter.java
-    └── Cell.java
+├── runtime/
+│   ├── Interpreter.java
+│   └── Cell.java
+│
+└── cli/
+    ├── CommandLineArgs.java
+    ├── Evaluable.java
+    ├── LexerEval.java
+    ├── OptimizerEval.java
+    ├── ParserEval.java
+    └── REPL.java
 ```
 
 ### Detailed component description:
