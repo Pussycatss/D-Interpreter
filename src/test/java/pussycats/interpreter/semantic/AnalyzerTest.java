@@ -209,4 +209,119 @@ class AnalyzerTest {
         assertHasError("var t := {a := 1, b := 2, a := 3}",
                 "Duplicate tuple key");
     }
+
+    /* ============ tuples: field access ============ */
+
+    @Test
+    @DisplayName("Valid: access existing field on literal tuple")
+    void validLiteralTupleField() {
+        assertNoErrors("print {a := 1, b := 2}.a");
+    }
+
+    @Test
+    @DisplayName("Error: access missing field on literal tuple")
+    void invalidLiteralTupleField() {
+        assertHasError("print {a := 1, b := 2}.c",
+                "Tuple does not have a field named 'c'");
+    }
+
+    @Test
+    @DisplayName("Valid: access existing field on variable tuple")
+    void validVariableTupleField() {
+        assertNoErrors("""
+                var t := {a := 1, b := 2}
+                print t.a
+                """);
+    }
+
+    @Test
+    @DisplayName("Error: access missing field on variable tuple")
+    void invalidVariableTupleField() {
+        assertHasError("""
+                var t := {a := 1, b := 2}
+                print t.c
+                """, "Tuple 't' does not have a field named 'c'");
+    }
+
+    @Test
+    @DisplayName("Valid: access field after tuple reassignment (state reset)")
+    void validTupleReassignment() {
+        // When 't' is reassigned, the analyzer forgets it was a tuple.
+        // So 't.x' won't trigger a static error (it will be a runtime error).
+        assertNoErrors("""
+                var t := {a := 1}
+                t := [1, 2]
+                print t.x
+                """);
+    }
+
+    /* ============ tuples: index access ============ */
+
+    @Test
+    @DisplayName("Valid: access valid index on literal tuple")
+    void validLiteralTupleIndex() {
+        assertNoErrors("print {10, 20, 30}.2");
+    }
+
+    @Test
+    @DisplayName("Error: access out-of-bounds index on literal tuple")
+    void invalidLiteralTupleIndex() {
+        assertHasError("print {10, 20, 30}.4",
+                "Tuple index out of bounds");
+    }
+
+    @Test
+    @DisplayName("Valid: access valid index on variable tuple")
+    void validVariableTupleIndex() {
+        assertNoErrors("""
+                var t := {10, 20, 30}
+                print t.3
+                """);
+    }
+
+    @Test
+    @DisplayName("Error: access out-of-bounds index on variable tuple")
+    void invalidVariableTupleIndex() {
+        assertHasError("""
+                var t := {10, 20, 30}
+                print t.4
+                """, "Tuple index out of bounds");
+    }
+
+    @Test
+    @DisplayName("Error: access index 0 on tuple (D is 1-based)")
+    void zeroIndexTuple() {
+        assertHasError("""
+                var t := {10, 20}
+                print t.0
+                """, "Tuple index out of bounds");
+    }
+
+    /* ============ tuples: edge cases ============ */
+
+    @Test
+    @DisplayName("Valid: unnamed tuple elements can be accessed by index")
+    void validUnnamedTupleIndex() {
+        assertNoErrors("print {10, 20, 30}.1");
+    }
+
+    @Test
+    @DisplayName("Error: unnamed tuple elements cannot be accessed by name")
+    void invalidUnnamedTupleField() {
+        // The first element has no name, so .a should fail
+        assertHasError("print {10, 20, 30}.a",
+                "Tuple does not have a field named 'a'");
+    }
+
+    @Test
+    @DisplayName("Valid: mixed named/unnamed tuple accesses")
+    void validMixedTupleAccess() {
+        assertNoErrors("""
+                var t := {a := 1, 2, b := 3}
+                print t.a
+                print t.2
+                print t.b
+                print t.3
+                """);
+    }
 }

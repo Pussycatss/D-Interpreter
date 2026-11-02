@@ -1,5 +1,7 @@
 package pussycats.interpreter.error;
 
+import pussycats.interpreter.ast.SourceLocation;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -21,6 +23,22 @@ public final class ErrorReporter {
 
     public void report(String message, int line, int column) {
         report(message, null, line, column, 1);
+    }
+
+    public void report(String message, SourceLocation loc) {
+        report(message, null, loc.line(), loc.column(), 1);
+    }
+
+    public void report(String message, SourceLocation loc, int length) {
+        report(message, null, loc.line(), loc.column(), length);
+    }
+
+    public void report(String message, String suggestion, SourceLocation loc) {
+        report(message, suggestion, loc.line(), loc.column(), 1);
+    }
+
+    public void report(String message, String suggestion, SourceLocation loc, int length) {
+        report(message, suggestion, loc.line(), loc.column(), length);
     }
 
     public void report(String message, String suggestion, int line, int column, int length) {

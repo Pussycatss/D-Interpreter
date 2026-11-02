@@ -17,6 +17,8 @@ public class Analyzer {
 
     private static final class Scope {
         final Set<String> names = new HashSet<>();
+        final Map<String, Integer> tupleSizes = new HashMap<>();
+        final Map<String, Set<String>> tupleFields = new HashMap<>();
     }
 
     public Analyzer(String source, String filename) {
@@ -100,6 +102,12 @@ public class Analyzer {
             }
             case Statement.Assign a -> {
                 checkAssignmentTarget(a.target(), a.loc());
+                if (a.target() instanceof Expression.Ident i) {
+                    for (Scope scope : scopes) {
+                        scope.tupleSizes.remove(i.name());
+                        scope.tupleFields.remove(i.name());
+                    }
+                }
                 analyze(a.target());
                 analyze(a.value());
             }
@@ -140,8 +148,14 @@ public class Analyzer {
                 analyze(idx.target());
                 analyze(idx.index());
             }
-            case Expression.Field fld -> analyze(fld.target());
-            case Expression.FieldIndex fld -> analyze(fld.target());
+            case Expression.Field fld -> {
+                analyze(fld.target());
+                checkTupleFieldAccess(fld);
+            }
+            case Expression.FieldIndex fld -> {
+                analyze(fld.target());
+                checkTupleFieldIndex(fld);
+            }
             case Expression.IsCheck isc -> analyze(isc.target());
             default -> {
             }
@@ -161,6 +175,15 @@ public class Analyzer {
         return null;
     }
 
+    private Integer findTupleSize(String name) {
+        for (Scope scope : scopes) {
+            if (scope.tupleSizes.containsKey(name)) {
+                return scope.tupleSizes.get(name);
+            }
+        }
+        return null;
+    }
+
     // ==========================================
     // Semantic Checks
     // ==========================================
@@ -170,33 +193,40 @@ public class Analyzer {
         if (scope.names.contains(v.name())) {
             SourceLocation loc = v.loc() != null ? v.loc() : SourceLocation.UNKNOWN;
             reporter.report("Duplicate declaration", "Variable '" + v.name() +
-                            "' is already defined in this scope", loc.line(), loc.column(), v.name().length());
+                            "' is already defined in this scope", loc, v.name().length());
             return;
         }
         scope.names.add(v.name());
+        if (v.init() instanceof Expression.TupleLit t) {
+            scope.tupleSizes.put(v.name(), t.entries().size());
+            Set<String> fields = new HashSet<>();
+            for (Expression.TupleEntry entry : t.entries()) {
+                if (entry.name() != null) {
+                    fields.add(entry.name());
+                }
+            }
+            scope.tupleFields.put(v.name(), fields);
+        }
     }
 
     private void checkVariableUsage(Expression.Ident i) {
         if (findScope(i.name()) == null) {
             SourceLocation loc = i.loc() != null ? i.loc() : SourceLocation.UNKNOWN;
-            reporter.report("Undeclared variable: '" + i.name() + "'",
-                    null, loc.line(), loc.column(), i.name().length());
+            reporter.report("Undeclared variable: '" + i.name() + "'", loc, i.name().length());
         }
     }
 
     private void checkExitStatement(Statement.ExitStatement e) {
         if (loopDepth <= 0) {
             SourceLocation loc = e.loc() != null ? e.loc() : SourceLocation.UNKNOWN;
-            reporter.report("'exit' can only appear inside a loop",
-                    null, loc.line(), loc.column(), 4);
+            reporter.report("'exit' can only appear inside a loop", loc, 4);
         }
     }
 
     private void checkReturnStatement(Statement.ReturnStatement r) {
         if (functionDepth <= 0) {
             SourceLocation loc = r.loc() != null ? r.loc() : SourceLocation.UNKNOWN;
-            reporter.report("'return' can only appear inside a function",
-                    null, loc.line(), loc.column(), 6);
+            reporter.report("'return' can only appear inside a function", loc, 6);
         }
     }
 
@@ -206,8 +236,7 @@ public class Analyzer {
                 || target instanceof Expression.Field
                 || target instanceof Expression.FieldIndex)) {
             reporter.report("Invalid assignment target",
-                    "the left side of ':=' must be a variable, array element, or tuple field",
-                    loc.line(), loc.column(), 1);
+                    "the left side of ':=' must be a variable, array element, or tuple field", loc);
         }
     }
 
@@ -220,8 +249,7 @@ public class Analyzer {
             if (!seenParams.add(param.name())) {
                 SourceLocation loc = param.loc();
                 reporter.report("Duplicate function parameter", "'" + param.name() +
-                                "' is defined multiple times", loc.line(), loc.column(),
-                                param.name().length());
+                                "' is defined multiple times", loc, param.name().length());
             }
         }
     }
@@ -235,7 +263,49 @@ public class Analyzer {
             if (entry.name() != null && !seenKeys.add(entry.name())) {
                 SourceLocation loc = entry.loc();
                 reporter.report("Duplicate tuple key", "'" + entry.name() +
-                                "' is defined multiple times", loc.line(), loc.column(), entry.name().length());
+                        "' is defined multiple times", loc, entry.name().length());
+            }
+        }
+    }
+
+    private void checkTupleFieldAccess(Expression.Field fld) {
+        if (fld.target() instanceof Expression.TupleLit tupleLit) {
+            boolean found = tupleLit.entries().stream().anyMatch(e -> fld.name().equals(e.name()));
+            if (!found) {
+                reporter.report("Tuple does not have a field named '" + fld.name() + "'", fld.loc());
+            }
+        }
+        else if (fld.target() instanceof Expression.Ident ident) {
+            Set<String> fields = findTupleFields(ident.name());
+            if (fields != null && !fields.contains(fld.name())) {
+                reporter.report("Tuple '" + ident.name() + "' does not have a field named '" + fld.name() +
+                        "'", fld.loc());
+            }
+        }
+    }
+
+    private Set<String> findTupleFields(String name) {
+        for (Scope scope : scopes) {
+            if (scope.tupleFields.containsKey(name)) {
+                return scope.tupleFields.get(name);
+            }
+        }
+        return null;
+    }
+
+    private void checkTupleFieldIndex(Expression.FieldIndex fld) {
+        if (fld.target() instanceof Expression.TupleLit tupleLit) {
+            int size = tupleLit.entries().size();
+            if (fld.index() < 1 || fld.index() > size) {
+                reporter.report("Tuple index out of bounds","size is " + size + ", but index is " +
+                        fld.index(), fld.loc());
+            }
+        }
+        if (fld.target() instanceof Expression.Ident i) {
+            Integer size = findTupleSize(i.name());
+            if (size != null && (fld.index() < 1 || fld.index() > size)) {
+                reporter.report("Tuple '" + i.name() + "' index out of bounds", "size is " + size +
+                        ", but index is " + fld.index(), fld.loc());
             }
         }
     }
