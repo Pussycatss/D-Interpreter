@@ -22,7 +22,8 @@ public class OptimizerEval implements Evaluable {
             return parser.formatErrors();
         }
 
-        Node optimized = optimizer.runFullOptimization(ast);
+        // In REPL mode, don't remove unused variables - user may want to use them later
+        Node optimized = optimizer.runFullOptimization(ast, false);
 
         return "Original AST:\n" +
                 astPrinter.print(ast) +

@@ -86,7 +86,7 @@ public class Optimizer {
         if (folded != null) {
             return folded;
         }
-        Expression simplified = simplifyAlgebraic(b.op(), left, right);
+        Expression simplified = simplifyAlgebraic();
         if (simplified != null) {
             return simplified;
         }
@@ -274,7 +274,7 @@ public class Optimizer {
      * simplify it to "hello", the error disappears. Since we don't have type
      * information during optimization, we conservatively skip these transformations.
      */
-    private Expression simplifyAlgebraic(TokenType op, Expression left, Expression right) {
+    private Expression simplifyAlgebraic() {
         return null;
     }
 
@@ -557,12 +557,19 @@ public class Optimizer {
 
     /** Runs all passes until the AST stops changing */
     public Node runFullOptimization(Node ast) {
+        return runFullOptimization(ast, true);
+    }
+
+    /** Runs all passes until the AST stops changing */
+    public Node runFullOptimization(Node ast, boolean removeUnused) {
         if (ast == null) return null;
 
         for (int pass = 0; pass < MAX_PASSES; pass++) {
             Node prev = ast;
             ast = optimize(ast);
-            ast = removeUnusedVariables(ast, collectUsed(ast));
+            if (removeUnused) {
+                ast = removeUnusedVariables(ast, collectUsed(ast));
+            }
             if (ast.equals(prev)) {
                 break;
             }

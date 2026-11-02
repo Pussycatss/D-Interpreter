@@ -84,7 +84,7 @@ public class REPL {
 
     /**
      * Checks if the input is incomplete (needs more lines).
-     * Uses bracket balancing and string literal detection.
+     * Uses bracket balancing, string literal detection, and keyword matching.
      */
     private boolean isInputIncomplete(String input) {
         int parenCount = 0;
@@ -92,7 +92,19 @@ public class REPL {
         int braceCount = 0;
         boolean inString = false;
         boolean escapeNext = false;
+        int keywordDepth = 0;
 
+        // First, check keyword depth by splitting input into words
+        String[] words = input.split("\\s+");
+        for (String word : words) {
+            if (isBlockKeyword(word)) {
+                keywordDepth++;
+            } else if ("end".equals(word)) {
+                keywordDepth--;
+            }
+        }
+
+        // Then check bracket balancing (skipping strings)
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
@@ -123,6 +135,15 @@ public class REPL {
             }
         }
 
-        return parenCount != 0 || bracketCount != 0 || braceCount != 0 || inString;
+        return parenCount != 0 || bracketCount != 0 || braceCount != 0 || inString || keywordDepth != 0;
+    }
+
+    private boolean isBlockKeyword(String word) {
+        // Strip trailing punctuation like () := etc.
+        String clean = word.replaceAll("[():=,]+$", "");
+        return switch (clean) {
+            case "if", "while", "loop", "for", "func" -> true;
+            default -> false;
+        };
     }
 }
