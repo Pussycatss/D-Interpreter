@@ -221,6 +221,62 @@ class OptimizerTest {
     // For example, "hello" + 0 should raise a type error at runtime, but if we
     // simplify it to "hello", the error disappears silently - bad.
 
+    /* ============ list/tuple folding ============ */
+
+    @Test
+    @DisplayName("Array index folding: [1,2,3][2] → 2")
+    void arrayIndexFolding() {
+        var e = assertInstanceOf(Expression.IntLit.class, optimizedExpr("[1,2,3][2]"));
+        assertEquals(new BigInteger("2"), e.value());
+    }
+
+    @Test
+    @DisplayName("Tuple field folding: {a:=\"you\",b:=\"pupu\"}.a → \"you\"")
+    void tupleFieldFolding() {
+        var e = assertInstanceOf(Expression.StringLit.class, optimizedExpr("{a:=\"you\",b:=\"pupu\"}.a"));
+        assertEquals("you", e.value());
+    }
+
+    @Test
+    @DisplayName("Array index with impure expression is NOT folded")
+    void arrayIndexWithImpureNotFolded() {
+        // [f(), 2][2] should not be folded because f() is not pure
+        var e = optimizedExpr("[f(), 2][2]");
+        assertInstanceOf(Expression.Index.class, e);
+    }
+
+    /* ============ list/tuple merging ============ */
+
+    @Test
+    @DisplayName("Tuple merging: {a:=1} + {b:=2} → {a:=1, b:=2}")
+    void tupleMerging() {
+        var e = assertInstanceOf(Expression.TupleLit.class, optimizedExpr("{a:=1} + {b:=2}"));
+        assertEquals(2, e.entries().size());
+        assertEquals("a", e.entries().get(0).name());
+        assertEquals("b", e.entries().get(1).name());
+    }
+
+    @Test
+    @DisplayName("Array merging: [1] + [2] → [1, 2]")
+    void arrayMerging() {
+        var e = assertInstanceOf(Expression.ArrayLit.class, optimizedExpr("[1] + [2]"));
+        assertEquals(2, e.elements().size());
+        var first = assertInstanceOf(Expression.IntLit.class, e.elements().get(0));
+        var second = assertInstanceOf(Expression.IntLit.class, e.elements().get(1));
+        assertEquals(new BigInteger("1"), first.value());
+        assertEquals(new BigInteger("2"), second.value());
+    }
+
+    @Test
+    @DisplayName("Array index assignment is NOT folded")
+    void arrayIndexAssignmentNotFolded() {
+        // [1,2][1] := 5 should remain as an assignment
+        var block = optimize("[1,2][1] := 5");
+        assertEquals(1, block.statements().size());
+        var stmt = assertInstanceOf(Statement.Assign.class, block.statements().getFirst());
+        assertInstanceOf(Expression.Index.class, stmt.target());
+    }
+
     /* ============ if statement simplification ============ */
 
     @Test
