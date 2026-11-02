@@ -49,21 +49,6 @@
                         <release>${java.version}</release>
                     </configuration>
                 </plugin>
-                <plugin>
-                    <groupId>com.github.gantsign.maven</groupId>
-                    <artifactId>git-build-hook-maven-plugin</artifactId>
-                    <version>3.4.1</version>
-                    <configuration>
-                        <hooksDirectory>githooks</hooksDirectory>
-                    </configuration>
-                    <executions>
-                        <execution>
-                            <goals>
-                                <goal>install</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
@@ -75,6 +60,23 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.3</version>
+            </plugin>
+            <plugin>
+                <groupId>com.rudikershaw.gitbuildhook</groupId>
+                <artifactId>git-build-hook-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <configuration>
+                    <gitConfig>
+                        <core.hooksPath>githooks</core.hooksPath>
+                    </gitConfig>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>configure</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

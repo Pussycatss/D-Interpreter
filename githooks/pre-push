@@ -1,9 +1,19 @@
 #!/bin/sh
-echo "▶ Running Maven tests before push..."
-mvn -B -q test
-if [ $? -ne 0 ]; then
-    echo "Tests failed - push aborted."
+echo "Running Maven tests before push..."
+
+if [ -x ./mvnw ]; then
+    ./mvnw -B -q test
+elif command -v mvn >/dev/null 2>&1; then
+    mvn -B -q test
+else
+    echo "Neither ./mvnw nor mvn found — cannot run tests. Push aborted."
     exit 1
 fi
+
+if [ $? -ne 0 ]; then
+    echo "Tests failed — push aborted."
+    exit 1
+fi
+
 echo "Tests passed."
 exit 0
