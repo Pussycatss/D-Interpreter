@@ -31,7 +31,8 @@ public class Optimizer {
                     g.decls().stream().map(d -> (Statement.VarDecl) optimize(d)).toList(), g.loc());
             case Statement.ExpressionStatement e -> new Statement.ExpressionStatement(
                     (Expression) optimize(e.expression()), e.loc());
-            case Statement.Assign a -> new Statement.Assign((Expression) optimize(a.target()),
+            // The target of an assignment is an lvalue: it must not be folded into a value
+            case Statement.Assign a -> new Statement.Assign(optimizeLvalue(a.target()),
                     (Expression) optimize(a.value()), a.loc());
             case Statement.PrintStatement p -> new Statement.PrintStatement(
                     p.values().stream().map(v -> (Expression) optimize(v)).toList(), p.loc());
@@ -67,12 +68,9 @@ public class Optimizer {
             case Expression.TupleLit t -> new Expression.TupleLit(
                     t.entries().stream().map(e -> new Expression.TupleEntry(e.name(),
                             (Expression) optimize(e.value()), e.loc())).toList(), t.loc());
-            case Expression.Index idx -> new Expression.Index((Expression) optimize(idx.target()),
-                    (Expression) optimize(idx.index()), idx.loc());
-            case Expression.Field fld -> new Expression.Field((Expression) optimize(fld.target()), fld.name(),
-                    fld.loc());
-            case Expression.FieldIndex fld -> new Expression.FieldIndex((Expression) optimize(fld.target()),
-                    fld.index(), fld.loc());
+            case Expression.Index idx -> optimizeIndex(idx);
+            case Expression.Field fld -> optimizeField(fld);
+            case Expression.FieldIndex fld -> optimizeFieldIndex(fld);
             case Expression.IsCheck isc -> new Expression.IsCheck((Expression) optimize(isc.target()), isc.type(),
                     isc.loc());
             case Expression.FuncLit f -> new Expression.FuncLit(f.params(), optimize(f.body()), f.isBlock(), f.loc());
@@ -108,6 +106,12 @@ public class Optimizer {
         if (left instanceof Expression.StringLit(var l, var ignored1) &&
                 right instanceof Expression.StringLit(var r, var ignored2)) {
             return op == TokenType.PLUS ? new Expression.StringLit(l + r, loc) : null;
+        }
+        if (op == TokenType.PLUS) {
+            Expression merged = mergeAggregates(left, right, loc);
+            if (merged != null) {
+                return merged;
+            }
         }
         // Remaining numeric combinations: Int/Real, Real/Int, Real/Real
         Double l = asDouble(left);
@@ -158,6 +162,110 @@ public class Optimizer {
             case XOR -> new Expression.BoolLit(l ^ r, loc);
             default -> null;
         };
+    }
+
+    /**
+     * [1] + [2] -> [1, 2]; {a := 1} + {b := 2} -> {a := 1, b := 2}.
+     * Tuples with a name present on both sides are left alone (the runtime decides what that means).
+     */
+    private Expression mergeAggregates(Expression left, Expression right, SourceLocation loc) {
+        if (left instanceof Expression.ArrayLit(var leftElems, var ignored1)
+                && right instanceof Expression.ArrayLit(var rightElems, var ignored2)) {
+            List<Expression> all = new ArrayList<>(leftElems);
+            all.addAll(rightElems);
+            return new Expression.ArrayLit(all, loc);
+        }
+        if (left instanceof Expression.TupleLit(var leftEntries, var ignored3)
+                && right instanceof Expression.TupleLit(var rightEntries, var ignored4)
+                && !haveCommonNames(leftEntries, rightEntries)) {
+            List<Expression.TupleEntry> all = new ArrayList<>(leftEntries);
+            all.addAll(rightEntries);
+            return new Expression.TupleLit(all, loc);
+        }
+        return null;
+    }
+
+    private boolean haveCommonNames(List<Expression.TupleEntry> a, List<Expression.TupleEntry> b) {
+        Set<String> names = new HashSet<>();
+        for (Expression.TupleEntry e : a) {
+            if (e.name() != null) names.add(e.name());
+        }
+        for (Expression.TupleEntry e : b) {
+            if (e.name() != null && names.contains(e.name())) return true;
+        }
+        return false;
+    }
+
+    private Node optimizeIndex(Expression.Index idx) {
+        Expression target = (Expression) optimize(idx.target());
+        Expression index = (Expression) optimize(idx.index());
+
+        if (target instanceof Expression.ArrayLit(var elements, var ignored1)
+                && index instanceof Expression.IntLit(var pos, var ignored2)
+                && pos.signum() > 0 && pos.compareTo(BigInteger.valueOf(elements.size())) <= 0) {
+            int i = pos.intValueExact() - 1; // arrays are 1-based
+            if (othersPure(elements, i)) {
+                return elements.get(i);
+            }
+        }
+        return new Expression.Index(target, index, idx.loc());
+    }
+
+    private Node optimizeField(Expression.Field fld) {
+        Expression target = (Expression) optimize(fld.target());
+
+        if (target instanceof Expression.TupleLit(var entries, var ignored)) {
+            for (int i = 0; i < entries.size(); i++) {
+                if (fld.name().equals(entries.get(i).name())) {
+                    if (othersPure(tupleValues(entries), i)) {
+                        return entries.get(i).value();
+                    }
+                    break;
+                }
+            }
+        }
+        return new Expression.Field(target, fld.name(), fld.loc());
+    }
+
+    private Node optimizeFieldIndex(Expression.FieldIndex fld) {
+        Expression target = (Expression) optimize(fld.target());
+
+        if (target instanceof Expression.TupleLit(var entries, var ignored)) {
+            int pos = fld.index();
+            if (pos >= 1 && pos <= entries.size()) { // tuples are 1-based
+                int i = pos - 1;
+                if (othersPure(tupleValues(entries), i)) {
+                    return entries.get(i).value();
+                }
+            }
+        }
+        return new Expression.FieldIndex(target, fld.index(), fld.loc());
+    }
+
+    /** Optimizes the insides of an assignment target without replacing the target itself by a value. */
+    private Expression optimizeLvalue(Expression target) {
+        return switch (target) {
+            case Expression.Index idx -> new Expression.Index((Expression) optimize(idx.target()),
+                    (Expression) optimize(idx.index()), idx.loc());
+            case Expression.Field f -> new Expression.Field((Expression) optimize(f.target()), f.name(), f.loc());
+            case Expression.FieldIndex f -> new Expression.FieldIndex((Expression) optimize(f.target()),
+                    f.index(), f.loc());
+            default -> (Expression) optimize(target);
+        };
+    }
+
+    private List<Expression> tupleValues(List<Expression.TupleEntry> entries) {
+        return entries.stream().map(Expression.TupleEntry::value).toList();
+    }
+
+    /** True if every element except the one at index `keep` is pure. */
+    private boolean othersPure(List<Expression> values, int keep) {
+        for (int j = 0; j < values.size(); j++) {
+            if (j != keep && !isPure(values.get(j))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -473,10 +581,6 @@ public class Optimizer {
     private static boolean isNonZeroNumber(Expression e) {
         Double d = asDouble(e);
         return d != null && d != 0.0;
-    }
-
-    private static boolean isInt(Expression e, BigInteger value) {
-        return e instanceof Expression.IntLit(var v, var ignored) && v.equals(value);
     }
 
     private static Expression realOrNull(double v, SourceLocation loc) {
