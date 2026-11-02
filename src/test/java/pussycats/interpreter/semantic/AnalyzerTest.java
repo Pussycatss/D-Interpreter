@@ -285,7 +285,7 @@ class AnalyzerTest {
         assertHasError("""
                 var t := {10, 20, 30}
                 print t.4
-                """, "Tuple index out of bounds");
+                """, "Tuple 't' index out of bounds");
     }
 
     @Test
@@ -294,7 +294,7 @@ class AnalyzerTest {
         assertHasError("""
                 var t := {10, 20}
                 print t.0
-                """, "Tuple index out of bounds");
+                """, "Tuple 't' index out of bounds");
     }
 
     /* ============ tuples: edge cases ============ */
