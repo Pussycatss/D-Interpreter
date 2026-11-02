@@ -35,7 +35,7 @@ public final class Parser {
 
     public Parser(List<Token> tokens, String source, String filename) {
         this.tokens = tokens;
-        this.reporter = new ErrorReporter(source, filename, "SyntaxError");
+        this.reporter = new ErrorReporter(source, filename);
     }
 
     public boolean hasErrors() {
@@ -731,7 +731,7 @@ public final class Parser {
             case EOF, NEWLINE -> 1;
             default -> Math.max(1, at.lexeme().length());
         };
-        reporter.report(message, suggestion, at.line(), at.column(), len);
+        reporter.report("SyntaxError", message, suggestion, at.line(), at.column(), len);
         return new ParsePanic();
     }
 

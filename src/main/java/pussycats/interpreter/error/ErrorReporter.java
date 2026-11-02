@@ -13,35 +13,29 @@ public final class ErrorReporter {
     private final List<DiagnosticError> errors = new ArrayList<>();
     private final String source;
     private final String filename;
-    private final String errorType;
 
-    public ErrorReporter(String source, String filename, String errorType) {
+    public ErrorReporter(String source, String filename) {
         this.source = source;
         this.filename = filename;
-        this.errorType = errorType;
     }
 
-    public void report(String message, int line, int column) {
-        report(message, null, line, column, 1);
+    public void report(String errorType, String message, SourceLocation loc) {
+        report(errorType, message, null, loc.line(), loc.column(), 1);
     }
 
-    public void report(String message, SourceLocation loc) {
-        report(message, null, loc.line(), loc.column(), 1);
+    public void report(String errorType, String message, SourceLocation loc, int length) {
+        report(errorType, message, null, loc.line(), loc.column(), length);
     }
 
-    public void report(String message, SourceLocation loc, int length) {
-        report(message, null, loc.line(), loc.column(), length);
+    public void report(String errorType, String message, String suggestion, SourceLocation loc, int length) {
+        report(errorType, message, suggestion, loc.line(), loc.column(), length);
     }
 
-    public void report(String message, String suggestion, SourceLocation loc) {
-        report(message, suggestion, loc.line(), loc.column(), 1);
+    public void report(String errorType, String message, String suggestion, SourceLocation loc) {
+        report(errorType, message, suggestion, loc.line(), loc.column(), 1);
     }
 
-    public void report(String message, String suggestion, SourceLocation loc, int length) {
-        report(message, suggestion, loc.line(), loc.column(), length);
-    }
-
-    public void report(String message, String suggestion, int line, int column, int length) {
+    public void report(String errorType, String message, String suggestion, int line, int column, int length) {
         if (tooManyErrors()) {
             return;
         }
