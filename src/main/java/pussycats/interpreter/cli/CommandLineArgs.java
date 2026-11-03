@@ -5,10 +5,11 @@ import pussycats.interpreter.ast.Node;
 import pussycats.interpreter.lexer.Lexer;
 import pussycats.interpreter.lexer.Token;
 import pussycats.interpreter.parser.Parser;
-import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
+import pussycats.interpreter.semantic.Optimizer;
+import pussycats.interpreter.semantic.Analyzer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,6 +33,9 @@ public class CommandLineArgs implements Callable<Integer> {
     @Option(names = {"-c", "--code"}, description = "Execute program passed as a string")
     private String code = null;
 
+    @Option(names = {"-o", "--optimizer"}, description = "Run REPL with optimizer (shows before/after AST)")
+    private boolean optimizerMode = false;
+
     @Parameters(index = "0", description = "Script file to execute", arity = "0..1")
     private String file = null;
 
@@ -40,28 +44,25 @@ public class CommandLineArgs implements Callable<Integer> {
         if (dumpAll) {
             dumpTokens = true;
             dumpAst = true;
-        }
-
-        if (!dumpTokens && !dumpAst) {
-            dumpAst = true;
+            optimizerMode = true;
         }
 
         if (code != null) {
-            run(code, "<string>", dumpTokens, dumpAst);
+            run(code, "<string>");
             return 0;
         }
 
         if (file != null) {
-            runFile(file, dumpTokens, dumpAst);
+            runFile(file);
             return 0;
         }
 
         // No file, no -c: drop into the REPL.
-        new REPL("parser");
+        new REPL(optimizerMode ? "optimizer" : "parser");
         return 0;
     }
 
-    private void runFile(String path, boolean dumpTokens, boolean dumpAst) {
+    private void runFile(String path) {
         String source;
         try {
             source = Files.readString(Path.of(path));
@@ -70,10 +71,10 @@ public class CommandLineArgs implements Callable<Integer> {
             System.exit(1);
             return;
         }
-        run(source, path, dumpTokens, dumpAst);
+        run(source, path);
     }
 
-    private void run(String source, String sourceName, boolean dumpTokens, boolean dumpAst) {
+    private void run(String source, String sourceName) {
         // ---- Lexer ----
         List<Token> tokens = new Lexer(source, sourceName).scan();
 
@@ -100,6 +101,31 @@ public class CommandLineArgs implements Callable<Integer> {
             System.out.println(new AstPrinter().print(ast));
         }
 
-        // TODO: semantic analysis + interpretation
+        // ---- Analyzer ----
+        Analyzer analyzer = new Analyzer(source, sourceName);
+        analyzer.analyze(ast);
+
+        if (analyzer.hasErrors()) {
+            System.err.print(analyzer.formatErrors());
+            System.exit(1);
+            return;
+        }
+
+        // ---- Optimizer ----
+        Optimizer optimizer = new Optimizer();
+        Node optimizedAst = optimizer.runFullOptimization(ast);
+
+        if (optimizedAst == null) {
+            System.err.println("Optimizer failed to optimize AST");
+            System.exit(1);
+            return;
+        }
+
+        if (optimizerMode) {
+            System.out.println("=== Optimized AST ===");
+            System.out.println(new AstPrinter().print(optimizedAst));
+        }
+
+        // TODO: interpretation
     }
 }

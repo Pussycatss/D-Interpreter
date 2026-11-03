@@ -11,35 +11,41 @@ import java.util.List;
  */
 public sealed interface Expression extends Node {
 
-    record IntLit(BigInteger value)                                 implements Expression {}
-    record RealLit(double value)                                    implements Expression {}
-    record StringLit(String value)                                  implements Expression {}
-    record BoolLit(boolean value)                                   implements Expression {}
-    record NoneLit()                                                implements Expression {}
-    record Ident(String name)                                       implements Expression {}
-    record ArrayLit(List<Expression> elements)                      implements Expression {}
-    record TupleLit(List<TupleEntry> entries)                       implements Expression {}
+    // --- Literals ---
+    record IntLit(BigInteger value, SourceLocation loc)                                 implements Expression {}
+    record RealLit(double value, SourceLocation loc)                                    implements Expression {}
+    record StringLit(String value, SourceLocation loc)                                  implements Expression {}
+    record BoolLit(boolean value, SourceLocation loc)                                   implements Expression {}
+    record NoneLit(SourceLocation loc)                                                  implements Expression {}
 
+    // --- References ---
+    record Ident(String name, SourceLocation loc)                                       implements Expression {}
+    /** Element access by an expression: {@code a[i]}. */
+    record Index(Expression target, Expression index, SourceLocation loc)               implements Expression {}
+    /** Tuple field access by name: {@code p.x}. */
+    record Field(Expression target, String name, SourceLocation loc)                    implements Expression {}
+    /** Tuple field access by position: {@code t.2}. */
+    record FieldIndex(Expression target, int index, SourceLocation loc)                 implements Expression {}
+
+    // --- Operators ---
+    record Call(Expression callee, List<Expression> args, SourceLocation loc)           implements Expression {}
+    /** Operation with one operand, e.g. {@code -x} or {@code not x}. */
+    record Unary(TokenType op, Expression operand, SourceLocation loc)                  implements Expression {}
+    record Binary(Expression left, TokenType op, Expression right, SourceLocation loc)  implements Expression {}
+    /** Type check: {@code x is int}. */
+    record IsCheck(Expression target, TypeIndicator type, SourceLocation loc)           implements Expression {}
+
+    // --- Composite ---
+    record ArrayLit(List<Expression> elements, SourceLocation loc)                      implements Expression {}
+    record TupleLit(List<TupleEntry> entries, SourceLocation loc)                       implements Expression {}
     /**
      * Function literal.
      *
      * @param body    an {@link Expression} for {@code => expr}, or a block of statements
      * @param isBlock true if the body is a statement block, false if it is a single expression
      */
-    record FuncLit(List<String> params, Node body, boolean isBlock) implements Expression {}
-
-    /** Operation with one operand, e.g. {@code -x} or {@code not x}. */
-    record Unary(TokenType op, Expression operand)                  implements Expression {}
-    record Binary(Expression left, TokenType op, Expression right)  implements Expression {}
-    /** Element access by an expression: {@code a[i]}. */
-    record Index(Expression target, Expression index)               implements Expression {}
-    record Call(Expression callee, List<Expression> args)           implements Expression {}
-    /** Tuple field access by name: {@code p.x}. */
-    record Field(Expression target, String name)                    implements Expression {}
-    /** Tuple field access by position: {@code t.2}. */
-    record FieldIndex(Expression target, int index)                 implements Expression {}
-    /** Type check: {@code x is int}. */
-    record IsCheck(Expression target, TypeIndicator type)           implements Expression {}
+    record FuncLit(List<Parameter> params, Node body, boolean isBlock, SourceLocation loc) implements Expression {}
+    record Parameter(String name, SourceLocation loc) {}
 
     /**
      * One element of a tuple literal.
@@ -47,5 +53,5 @@ public sealed interface Expression extends Node {
      * @param name  field name, or {@code null} if the element is unnamed
      * @param value field value
      */
-    record TupleEntry(String name, Expression value) {}
+    record TupleEntry(String name, Expression value, SourceLocation loc) {}
 }

@@ -5,4 +5,6 @@ package pussycats.interpreter.ast;
  * <p>
  * Every node is either an {@link Expression} or a {@link Statement}.
  */
-public sealed interface Node permits Expression, Statement {}
+public sealed interface Node permits Expression, Statement {
+    SourceLocation loc();
+}
