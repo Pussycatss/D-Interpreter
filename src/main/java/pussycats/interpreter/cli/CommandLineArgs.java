@@ -44,19 +44,16 @@ public class CommandLineArgs implements Callable<Integer> {
         if (dumpAll) {
             dumpTokens = true;
             dumpAst = true;
-        }
-
-        if (!dumpTokens && !dumpAst) {
-            dumpAst = true;
+            optimizerMode = true;
         }
 
         if (code != null) {
-            run(code, "<string>", dumpTokens, dumpAst);
+            run(code, "<string>");
             return 0;
         }
 
         if (file != null) {
-            runFile(file, dumpTokens, dumpAst);
+            runFile(file);
             return 0;
         }
 
@@ -65,7 +62,7 @@ public class CommandLineArgs implements Callable<Integer> {
         return 0;
     }
 
-    private void runFile(String path, boolean dumpTokens, boolean dumpAst) {
+    private void runFile(String path) {
         String source;
         try {
             source = Files.readString(Path.of(path));
@@ -74,10 +71,10 @@ public class CommandLineArgs implements Callable<Integer> {
             System.exit(1);
             return;
         }
-        run(source, path, dumpTokens, dumpAst);
+        run(source, path);
     }
 
-    private void run(String source, String sourceName, boolean dumpTokens, boolean dumpAst) {
+    private void run(String source, String sourceName) {
         // ---- Lexer ----
         List<Token> tokens = new Lexer(source, sourceName).scan();
 
@@ -124,7 +121,7 @@ public class CommandLineArgs implements Callable<Integer> {
             return;
         }
 
-        if (dumpAst) {
+        if (optimizerMode) {
             System.out.println("=== Optimized AST ===");
             System.out.println(new AstPrinter().print(optimizedAst));
         }
