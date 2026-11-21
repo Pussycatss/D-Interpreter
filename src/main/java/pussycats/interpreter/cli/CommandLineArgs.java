@@ -2,12 +2,15 @@ package pussycats.interpreter.cli;
 
 import pussycats.interpreter.ast.AstPrinter;
 import pussycats.interpreter.ast.Node;
+import pussycats.interpreter.error.ErrorReporter;
 import pussycats.interpreter.lexer.Lexer;
 import pussycats.interpreter.lexer.Token;
 import pussycats.interpreter.parser.Parser;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
+import pussycats.interpreter.runtime.Interpreter;
+import pussycats.interpreter.runtime.InterpreterException;
 import pussycats.interpreter.semantic.Optimizer;
 import pussycats.interpreter.semantic.Analyzer;
 
@@ -75,6 +78,8 @@ public class CommandLineArgs implements Callable<Integer> {
     }
 
     private void run(String source, String sourceName) {
+        ErrorReporter reporter = new ErrorReporter(source, sourceName);
+
         // ---- Lexer ----
         List<Token> tokens = new Lexer(source, sourceName).scan();
 
@@ -102,7 +107,7 @@ public class CommandLineArgs implements Callable<Integer> {
         }
 
         // ---- Analyzer ----
-        Analyzer analyzer = new Analyzer(source, sourceName);
+        Analyzer analyzer = new Analyzer(reporter);
         analyzer.analyze(ast);
 
         if (analyzer.hasErrors()) {
@@ -126,6 +131,15 @@ public class CommandLineArgs implements Callable<Integer> {
             System.out.println(new AstPrinter().print(optimizedAst));
         }
 
-        // TODO: interpretation
+        // ---- Interpreter ----
+        System.out.println("=== Execution ===");
+
+        Interpreter interpreter = new Interpreter(reporter);
+
+        try {
+            interpreter.interpret(optimizedAst);
+        } catch (InterpreterException e) {
+            reporter.report("RuntimeError", e.getMessage(), e.getLocation());
+        }
     }
 }

@@ -21,8 +21,8 @@ public class Analyzer {
         final Map<String, Set<String>> tupleFields = new HashMap<>();
     }
 
-    public Analyzer(String source, String filename) {
-        this.reporter = new ErrorReporter(source, filename);
+    public Analyzer(ErrorReporter reporter) {
+        this.reporter = reporter;
         scopes.push(new Scope());
     }
 
