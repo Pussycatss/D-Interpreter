@@ -134,12 +134,14 @@ public class CommandLineArgs implements Callable<Integer> {
         // ---- Interpreter ----
         System.out.println("=== Execution ===");
 
-        Interpreter interpreter = new Interpreter(reporter);
+        Interpreter interpreter = new Interpreter();
 
         try {
             interpreter.interpret(optimizedAst);
         } catch (InterpreterException e) {
             reporter.report("RuntimeError", e.getMessage(), e.getLocation());
+            System.err.print(reporter.formatAll());
+            System.exit(1);
         }
     }
 }

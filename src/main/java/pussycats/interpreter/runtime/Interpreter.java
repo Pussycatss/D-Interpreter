@@ -4,7 +4,6 @@ import pussycats.interpreter.ast.Expression;
 import pussycats.interpreter.ast.Node;
 import pussycats.interpreter.ast.SourceLocation;
 import pussycats.interpreter.ast.Statement;
-import pussycats.interpreter.error.ErrorReporter;
 import pussycats.interpreter.lexer.TokenType;
 
 import java.math.BigInteger;
@@ -16,10 +15,8 @@ import java.util.StringJoiner;
 public class Interpreter {
     private final StackFrame globalFrame;
     private final List<StackFrame> frameStack;
-    private final ErrorReporter reporter;
 
-    public Interpreter(ErrorReporter reporter) {
-        this.reporter = reporter;
+    public Interpreter() {
         this.globalFrame = new StackFrame(null, SourceLocation.UNKNOWN);
         this.frameStack = new ArrayList<>();
         this.frameStack.add(globalFrame);
@@ -30,16 +27,15 @@ public class Interpreter {
             return null;
         }
 
-        Object result = switch (node) {
+        return switch (node) {
             case Expression expr -> interpretExpression(expr);
             case Statement stmt -> interpretStatement(stmt);
         };
-        return result;
     }
 
     // Type-specific interpretation methods
     private Object interpretExpression(Expression expr) {
-        Object result = switch (expr) {
+        return switch (expr) {
             case Expression.IntLit i          -> new ImmutableCell(i.value(), i.loc());
             case Expression.RealLit r         -> new ImmutableCell(r.value(), r.loc());
             case Expression.StringLit s       -> new ImmutableCell(s.value(), s.loc());
@@ -57,7 +53,6 @@ public class Interpreter {
             case Expression.TupleLit t        -> interpretTupleLit(t);
             case Expression.FuncLit f         -> interpretFuncLit(f);
         };
-        return result;
     }
 
     private Object getVariable(Expression.Ident id) {
@@ -69,14 +64,7 @@ public class Interpreter {
 
     private Object interpretIndex(Expression.Index idx) {
         Cell targetCell = evaluate(idx.target());
-        if (targetCell == null) {
-            // return fail(idx, "Cannot evaluate target expression");
-            return null;
-        }
         Cell indexCell = evaluate(idx.index());
-        if (indexCell == null) {
-            return null;
-        }
         if (!(targetCell.get() instanceof ArrayCell arr)) {
             return fail(idx, "Cannot index this type");
         }
@@ -100,10 +88,6 @@ public class Interpreter {
 
     private Object interpretField(Expression.Field fld) {
         Cell targetCell = evaluate(fld.target());
-        if (targetCell == null) {
-            // return fail(fld, "Cannot evaluate target expression");
-            return null;
-        }
         if (!(targetCell.get() instanceof TupleCell tuple)) {
             return fail(fld, "Cannot access field on this type");
         }
@@ -117,10 +101,6 @@ public class Interpreter {
 
     private Object interpretFieldIndex(Expression.FieldIndex fldIdx) {
         Cell targetCell = evaluate(fldIdx.target());
-        if (targetCell == null) {
-            // return fail(fldIdx, "Cannot evaluate target expression");
-            return null;
-        }
         if (!(targetCell.get() instanceof TupleCell tuple)) {
             return fail(fldIdx, "Cannot index this type");
         }
@@ -134,10 +114,6 @@ public class Interpreter {
 
     private Object interpretCall(Expression.Call c) {
         Cell calleeCell = evaluate(c.callee());
-        if (calleeCell == null) {
-            // return fail(c, "Cannot evaluate callee expression");
-            return null;
-        }
         if (!(calleeCell.get() instanceof FunctionCell(
                 List<Expression.Parameter> params, Node body, StackFrame closure
         ))) {
@@ -150,10 +126,6 @@ public class Interpreter {
         List<Cell> argCells = new ArrayList<>(params.size());
         for (Expression arg : c.args()) {
             Cell argValue = evaluate(arg);
-            if (argValue == null) {
-                return null;
-            }
-            // pass-by-value: copy contents, don't alias the caller's cell
             argCells.add(new MutableCell(argValue.get(), arg.loc()));
         }
         StackFrame newFrame = new StackFrame(closure, c.loc());
@@ -175,10 +147,6 @@ public class Interpreter {
 
     private Object interpretUnary(Expression.Unary u) {
         Cell operandCell = evaluate(u.operand());
-        if (operandCell == null) {
-            // return fail(u, "Cannot evaluate unary operand");
-            return null;
-        }
         Object operand = operandCell.get();
 
         Object result = switch (u.op()) {
@@ -202,11 +170,7 @@ public class Interpreter {
     }
 
     private Object interpretBinary(Expression.Binary b) {
-        // Value rightValue = evalOperand(b.right(), "left", b);
         Cell leftCell = evalOperand(b.left());
-        if (leftCell == null) {
-            return null;
-        }
         Object left = leftCell.get();
 
         if (b.op() == TokenType.AND || b.op() == TokenType.OR) {
@@ -221,11 +185,7 @@ public class Interpreter {
             }
         }
 
-        // Value rightValue = evalOperand(b.right(), "right", b);
         Cell rightCell = evalOperand(b.right());
-        if (rightCell == null) {
-            return null;
-        }
         Object right = rightCell.get();
 
         Object result = switch (b.op()) {
@@ -236,14 +196,10 @@ public class Interpreter {
             case AND, OR, XOR -> logic(b, left, right);
             default -> fail(b, "Unknown binary operator");
         };
-        return result == null ? null : new ImmutableCell(result, b.loc());
+        return new ImmutableCell(result, b.loc());
     }
 
     private Cell evalOperand(Expression e) {
-//        Value v = (Value) interpretExpression(e);
-//        return (v == null)
-//            ? fail(b, "Cannot evaluate " + side + " operand")
-//            : v;
         return evaluate(e);
     }
 
@@ -339,9 +295,6 @@ public class Interpreter {
 
     private Object interpretIsCheck(Expression.IsCheck c) {
         Cell targetCell = evaluate(c.target());
-        if (targetCell == null) {
-            return null;
-        }
         Object target = targetCell.get();
 
         Boolean result = switch (c.type()) {
@@ -354,10 +307,6 @@ public class Interpreter {
             case TUPLE  -> target instanceof TupleCell;
             case FUNC   -> target instanceof FunctionCell;
         };
-        // TODO: decide to leave it or delete it
-        if (result == null) {
-            return fail(c, "Unknown type in 'is' check: " + c.type());
-        }
         return new ImmutableCell(result, c.loc());
     }
 
@@ -365,9 +314,6 @@ public class Interpreter {
         List<Cell> elements = new ArrayList<>(arr.elements().size());
         for (Expression elem : arr.elements()) {
             Cell elemCell = evaluate(elem);
-            if (elemCell == null) {
-                return null;
-            }
             elements.add(new MutableCell(elemCell.get(), elem.loc()));
         }
         return new ImmutableCell(new ArrayCell(elements), arr.loc());
@@ -377,9 +323,6 @@ public class Interpreter {
         List<TupleCell.Entry> entries = new ArrayList<>(t.entries().size());
         for (Expression.TupleEntry entry : t.entries()) {
             Cell cell = evaluate(entry.value());
-            if (cell == null) {
-                return null;
-            }
             entries.add(new TupleCell.Entry(
                     entry.name(),
                     new MutableCell(cell.get(), entry.value().loc())));
@@ -419,9 +362,6 @@ public class Interpreter {
         SourceLocation valueLoc = vd.loc();
         if (vd.init() != null) {
             Cell initCell = evaluate(vd.init());
-            if (initCell == null) {
-                return null;
-            }
             value = initCell.get();
             valueLoc = vd.init().loc();
         }
@@ -442,13 +382,7 @@ public class Interpreter {
             return fail(a.target(), "Cannot assign to function call result");
         }
         Cell target = evaluate(a.target());
-        if (target == null) {
-            return null;
-        }
         Cell rhs = evaluate(a.value());
-        if (rhs == null) {
-            return null;
-        }
         if (!target.isMutable()) {
             return fail(a, "Cannot assign to an immutable value");
         }
@@ -461,9 +395,6 @@ public class Interpreter {
         StringJoiner sj = new StringJoiner(" ");
         for (Expression expr : values) {
             Cell cell = evaluate(expr);
-            if (cell == null) {
-                return null;
-            }
             sj.add(formatValue(cell.get()));
         }
         System.out.println(sj);
@@ -494,9 +425,6 @@ public class Interpreter {
 
     private Object interpretIfStatement(Statement.IfStatement i) {
         Cell condCell = evaluate(i.cond());
-        if (condCell == null) {
-            return null;
-        }
         if (!(condCell.get() instanceof Boolean cond)) {
             return fail(i.cond(), "Non-boolean condition in if statement");
         }
@@ -513,25 +441,17 @@ public class Interpreter {
     private Object interpretWhileStatement(Statement.WhileStatement w) {
         while (true) {
             Cell condCell = evaluate(w.cond());
-
-            if (condCell == null) {
-                return null;
-            }
-
             if (!(condCell.get() instanceof Boolean cond)) {
                 return fail(w.cond(), "Non-boolean condition in while statement");
             }
-
             if (!cond) {
                 break;
             }
 
             Object result = interpretBlock(w.body());
-
             if (result instanceof Signal.ExitSignal) {
                 break;
             }
-
             if (result instanceof Signal) {
                 return result;
             }
@@ -542,11 +462,9 @@ public class Interpreter {
     private Object interpretLoopStatement(Statement.LoopStatement l) {
         while (true) {
             Object result = interpretBlock(l.body());
-
             if (result instanceof Signal.ExitSignal) {
                 break;
             }
-
             if (result instanceof Signal) {
                 return result;
             }
@@ -556,24 +474,16 @@ public class Interpreter {
 
     private Object interpretForRangeStatement(Statement.ForRangeStatement f) {
         Cell fromCell = evaluate(f.from());
-        if (fromCell == null) {
-            return null;
-        }
         Cell toCell = evaluate(f.to());
-        if (toCell == null) {
-            return null;
-        }
         if (!(fromCell.get() instanceof BigInteger from) ||
                 !(toCell.get() instanceof BigInteger to)) {
             return fail(f, "For range bounds must be integers");
         }
         for (BigInteger i = from; i.compareTo(to) <= 0; i = i.add(BigInteger.ONE)) {
             Object result = interpretBlock(f.body());
-
             if (result instanceof Signal.ExitSignal) {
                 break;
             }
-
             if (result instanceof Signal) {
                 return result;
             }
@@ -583,36 +493,25 @@ public class Interpreter {
 
     private Object interpretForInStatement(Statement.ForInStatement f) {
         Cell iterableCell = evaluate(f.iterable());
-        if (iterableCell == null) {
-            return null;
-        }
-
         if (!(iterableCell.get() instanceof Iterable<?> elements)) {
             return fail(f, "Expression in for-in statement must be iterable");
         }
 
-        StackFrame loopFrame = new StackFrame(frameStack.getLast(), f.loc());
-        frameStack.add(loopFrame);
-
-        try {
-            for (Object element : elements) {
+        StackFrame outer = frameStack.getLast();
+        for (Object element : elements) {
+            StackFrame loopFrame = new StackFrame(outer, f.loc());
+            frameStack.add(loopFrame);
+            try {
                 Object value = element instanceof Cell cell ? cell.get() : element;
                 loopFrame.setVariable(f.var(), new MutableCell(value, f.loc()));
 
                 Object result = interpretBlock(f.body());
-
-                if (result instanceof Signal.ExitSignal) {
-                    break;
-                }
-
-                if (result instanceof Signal) {
-                    return result;
-                }
+                if (result instanceof Signal.ExitSignal) break;
+                if (result instanceof Signal) return result;
+            } finally {
+                frameStack.removeLast();
             }
-        } finally {
-            frameStack.removeLast();
         }
-
         return null;
     }
 
@@ -623,15 +522,11 @@ public class Interpreter {
     private Object interpretReturnStatement(Statement.ReturnStatement r) {
         Expression value = r.value();
         SourceLocation loc = r.loc();
-
         if (value == null) {
             return new Signal.ReturnSignal(new ImmutableCell(null, loc), loc);
         }
 
         Cell valueCell = evaluate(value);
-        if (valueCell == null) {
-            return null;
-        }
         return new Signal.ReturnSignal(valueCell, loc);
     }
 
@@ -641,7 +536,6 @@ public class Interpreter {
         try {
             for (Statement statement : b.statements()) {
                 Object result = interpretStatement(statement);
-
                 if (result instanceof Signal) {
                     return result;
                 }

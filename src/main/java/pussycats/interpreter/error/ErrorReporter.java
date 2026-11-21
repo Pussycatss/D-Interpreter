@@ -60,6 +60,7 @@ public final class ErrorReporter {
         for (DiagnosticError e : errors) {
             sb.append(e.format()).append("\n\n");
         }
+        errors.clear();
         return sb.toString();
     }
 }
