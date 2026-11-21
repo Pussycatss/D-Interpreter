@@ -27,6 +27,9 @@ public final class Lexer {
     private int column = 1;
     private int startTokenColumn = 1;
     private boolean after_dot = false;
+    private int lastCodeEndColumn = 1;
+    private int lastCodeEndLine = 1;
+    private boolean hasCodeOnLine = false;
 
     public Lexer(String source, String sourceName) {
         this.source = source;
@@ -216,10 +219,18 @@ public final class Lexer {
         }
     }
 
+    /**
+     * Emits the NEWLINE token at the position right after the last real token on
+     * the line, so trailing whitespace and //-comments are effectively skipped.
+     * If the line contained no code, the newline is placed at column 1.
+     */
     private void addLineBreak() {
+        int nlLine = hasCodeOnLine ? lastCodeEndLine : line;
+        int nlColumn = hasCodeOnLine ? lastCodeEndColumn : 1;
+        tokens.add(new Token(TokenType.NEWLINE, "\\n", null, nlLine, nlColumn));
         line++;
         column = 1;
-        tokens.add(new Token(TokenType.NEWLINE, "\\n", null, line - 1, startTokenColumn));
+        hasCodeOnLine = false;
         after_dot = false;
     }
 
@@ -276,6 +287,9 @@ public final class Lexer {
     private void addToken(TokenType type, Object literal) {
         String lexeme = source.substring(start, current);
         tokens.add(new Token(type, lexeme, literal, line, startTokenColumn));
+        lastCodeEndColumn = column;
+        lastCodeEndLine = line;
+        hasCodeOnLine = true;
     }
 
     private LexerException error(String message) {
