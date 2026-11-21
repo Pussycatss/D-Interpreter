@@ -86,10 +86,13 @@ public final class Parser {
         skipSeparators();
         while (!isAtEnd() && !check(TokenType.END) && !check(TokenType.ELSE)) {
             statements.add(parseStatement());
-            if (!isAtEnd() && !check(TokenType.END) && !check(TokenType.ELSE)) {
-                requireStatementSeparator(TokenType.END, TokenType.ELSE);
-                skipSeparators();
+
+            if (isAtEnd() || check(TokenType.END) || check(TokenType.ELSE)) {
+                break;
             }
+
+            requireStatementSeparator(TokenType.END, TokenType.ELSE);
+            skipSeparators();
         }
         return statements;
     }
@@ -740,6 +743,13 @@ public final class Parser {
             case EOF -> "end of input";
             case NEWLINE -> "end of line";
             default -> "'" + t.lexeme() + "'";
+        };
+    }
+
+    private boolean startsStatement() {
+        return switch (peek().type()) {
+            case VAR, PRINT, IF, WHILE, LOOP, FOR, EXIT, RETURN -> true;
+            default -> false;
         };
     }
 

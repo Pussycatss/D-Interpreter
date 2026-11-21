@@ -7,10 +7,7 @@ import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.lexer.TokenType;
 
 import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.StringJoiner;
+import java.util.*;
 
 public class Interpreter {
     private final StackFrame globalFrame;
@@ -519,8 +516,11 @@ public class Interpreter {
             return fail(f, "Expression in for-in statement must be iterable");
         }
 
+        List<Object> snapshot = new ArrayList<>();
+        elements.forEach(snapshot::add);
+
         StackFrame outer = frameStack.getLast();
-        for (Object element : elements) {
+        for (Object element : snapshot) {
             StackFrame loopFrame = new StackFrame(outer, f.loc());
             frameStack.add(loopFrame);
             try {
