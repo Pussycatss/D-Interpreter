@@ -2,8 +2,10 @@ package pussycats.interpreter.cli;
 
 import pussycats.interpreter.ast.AstPrinter;
 import pussycats.interpreter.ast.Node;
+import pussycats.interpreter.ast.SourceLocation;
 import pussycats.interpreter.error.ErrorReporter;
 import pussycats.interpreter.lexer.Lexer;
+import pussycats.interpreter.lexer.LexerException;
 import pussycats.interpreter.lexer.Token;
 import pussycats.interpreter.parser.Parser;
 import picocli.CommandLine.Command;
@@ -81,7 +83,14 @@ public class CommandLineArgs implements Callable<Integer> {
         ErrorReporter reporter = new ErrorReporter(source, sourceName);
 
         // ---- Lexer ----
-        List<Token> tokens = new Lexer(source, sourceName).scan();
+        List<Token> tokens = List.of();
+        try {
+            tokens = new Lexer(source, sourceName).scan();
+        } catch (LexerException e) {
+            reporter.report("RuntimeError", e.getMessage(), new SourceLocation(e.getLine(), e.getColumn()));
+            System.err.print(reporter.formatAll());
+            System.exit(1);
+        }
 
         if (dumpTokens) {
             System.out.println("=== Tokens ===");
