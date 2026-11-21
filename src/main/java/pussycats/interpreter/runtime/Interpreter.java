@@ -61,25 +61,10 @@ public class Interpreter {
 
     private Object interpretIndex(Expression.Index idx) {
         Cell targetCell = evaluate(idx.target());
-        Cell indexCell = evaluate(idx.index());
         if (!(targetCell.get() instanceof ArrayCell arr)) {
             return fail(idx, "Cannot index this type");
         }
-
-        Object indexObj = indexCell.get();
-        int i;
-        try {
-            i = switch (indexObj) {
-                case BigInteger b  -> b.intValueExact();
-                case Integer n     -> n;
-                case null, default -> throw new ArithmeticException();
-            };
-        } catch (ArithmeticException e) {
-            return fail(idx, "Index must be an integer");
-        }
-        if (i < 1) {
-            return fail(idx, "Index must be >= 1");
-        }
+        int i = evaluateIndex(idx);
         if (i > arr.size()) {
             arr.growTo(i, idx.loc());
         }
@@ -388,7 +373,7 @@ public class Interpreter {
         if (a.target() instanceof Expression.Call) {
             return fail(a.target(), "Cannot assign to function call result");
         }
-        Cell target = evaluate(a.target());
+        Cell target = evaluateAssignmentTarget(a.target());
         Cell rhs = evaluate(a.value());
         if (!target.isMutable()) {
             return fail(a, "Cannot assign to an immutable value");
@@ -397,37 +382,104 @@ public class Interpreter {
         return null;
     }
 
+    private Cell evaluateAssignmentTarget(Expression expr) {
+        if (!(expr instanceof Expression.Index idx)) {
+            return evaluate(expr);
+        }
+        Cell targetCell = resolveIndexTarget(idx.target());
+        if (!(targetCell.get() instanceof ArrayCell arr)) {
+            return fail(idx, "Cannot index this type");
+        }
+        int i = evaluateIndex(idx);
+        if (i > arr.size()) {
+            arr.growTo(i, idx.loc());
+        }
+        return arr.get(i - 1);
+    }
+
+    private Cell resolveIndexTarget(Expression expr) {
+        if (!(expr instanceof Expression.Index)) {
+            return evaluate(expr);
+        }
+        Cell cell = evaluateAssignmentTarget(expr);
+        if (cell.get() == null) {
+            if (!cell.isMutable()) {
+                return fail(expr, "Cannot create an array in an immutable value");
+            }
+            cell.set(new ArrayCell(new ArrayList<>()));
+        }
+        if (!(cell.get() instanceof ArrayCell)) {
+            return fail(expr, "Cannot index this type");
+        }
+        return cell;
+    }
+
+    private int evaluateIndex(Expression.Index idx) {
+        Cell indexCell = evaluate(idx.index());
+        Object indexObj = indexCell.get();
+        int i;
+        try {
+            i = switch (indexObj) {
+                case BigInteger b -> b.intValueExact();
+                case Integer n -> n;
+                case null, default -> throw new ArithmeticException();
+            };
+        } catch (ArithmeticException e) {
+            return fail(idx, "Index must be an integer");
+        }
+        if (i < 1) {
+            return fail(idx, "Index must be >= 1");
+        }
+        return i;
+    }
+
     private Object interpretPrintStatement(Statement.PrintStatement p) {
         List<Expression> values = p.values();
         StringJoiner sj = new StringJoiner(" ");
         for (Expression expr : values) {
             Cell cell = evaluate(expr);
-            sj.add(formatValue(cell.get()));
+            sj.add(formatValue(cell.get(), new IdentityHashMap<>()));
         }
         System.out.println(sj);
         return null;
     }
 
-    private String formatValue(Object value) {
+    private String formatValue(Object value, IdentityHashMap<Object, Boolean> active) {
         return switch (value) {
             case null -> "none";
             case FunctionCell _ -> "<function>";
             case ArrayCell arr -> {
-                StringJoiner sj = new StringJoiner(", ", "[", "]");
-                for (Cell cell : arr.elements()) {
-                    sj.add(formatValue(cell.get()));
+                if (active.containsKey(arr)) {
+                    yield "<cycle>";
                 }
-                yield sj.toString();
+                active.put(arr, Boolean.TRUE);
+                try {
+                    StringJoiner sj = new StringJoiner(", ", "[", "]");
+                    for (Cell cell : arr.elements()) {
+                        sj.add(formatValue(cell.get(), active));
+                    }
+                    yield sj.toString();
+                } finally {
+                    active.remove(arr);
+                }
             }
             case TupleCell tuple -> {
-                StringJoiner sj = new StringJoiner(", ", "{", "}");
-                for (TupleCell.Entry entry : tuple.entries()) {
-                    String v = formatValue(entry.cell().get());
-                    sj.add(entry.name() == null
-                            ? v
-                            : entry.name() + " := " + v);
+                if (active.containsKey(tuple)) {
+                    yield "<cycle>";
                 }
-                yield sj.toString();
+                active.put(tuple, Boolean.TRUE);
+                try {
+                    StringJoiner sj = new StringJoiner(", ", "{", "}");
+                    for (TupleCell.Entry entry : tuple.entries()) {
+                        String v = formatValue(entry.cell().get(), active);
+                        sj.add(entry.name() == null
+                                ? v
+                                : entry.name() + " := " + v);
+                    }
+                    yield sj.toString();
+                } finally {
+                    active.remove(tuple);
+                }
             }
             case String s -> "\"" + s + "\"";
             default -> String.valueOf(value);
