@@ -12,6 +12,9 @@ import java.util.*;
 public class Interpreter {
     private final StackFrame globalFrame;
     private final List<StackFrame> frameStack;
+    private int callDepth = 0;
+
+    private static final int MAX_CALL_DEPTH = 256;
 
     public Interpreter() {
         this.globalFrame = new StackFrame(null, SourceLocation.UNKNOWN);
@@ -107,6 +110,9 @@ public class Interpreter {
         if (params.size() != c.args().size()) {
             return fail(c, "Argument count mismatch");
         }
+        if (callDepth >= MAX_CALL_DEPTH) {
+            return fail(c, "Maximum function call depth exceeded: " + MAX_CALL_DEPTH);
+        }
 
         List<Cell> argCells = new ArrayList<>(params.size());
         for (Expression arg : c.args()) {
@@ -115,6 +121,7 @@ public class Interpreter {
         }
         StackFrame newFrame = new StackFrame(closure, c.loc());
         frameStack.add(newFrame);
+        callDepth++;
         try {
             for (int i = 0; i < params.size(); i++) {
                 newFrame.setVariable(params.get(i).name(), argCells.get(i));
