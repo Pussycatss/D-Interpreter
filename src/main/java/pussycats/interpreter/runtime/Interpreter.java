@@ -191,8 +191,8 @@ public class Interpreter {
         Object result = switch (b.op()) {
             case PLUS, MINUS, ASTERISK, SLASH -> arithmetic(b, left, right);
             case LESS, LESS_EQUAL, GREATER, GREATER_EQUAL -> compare(b, left, right);
-            case EQUAL -> valuesEqual(left, right);
-            case NOT_EQUAL -> !valuesEqual(left, right);
+            case EQUAL -> valuesEqual(left, right, b);
+            case NOT_EQUAL -> !valuesEqual(left, right, b);
             case AND, OR, XOR -> logic(b, left, right);
             default -> fail(b, "Unknown binary operator");
         };
@@ -272,7 +272,11 @@ public class Interpreter {
         };
     }
 
-    private boolean valuesEqual(Object left, Object right) {
+    private boolean valuesEqual(Object left, Object right, Node node) {
+        // TODO: Decide if we throw an error or not
+        if (left == null || right == null) {
+            return fail(node, "Value 'none' cannot be used as an operand of equality");
+        }
         if (left instanceof BigInteger l && right instanceof BigInteger r) {
             return l.equals(r);
         }
@@ -403,7 +407,7 @@ public class Interpreter {
 
     private String formatValue(Object value) {
         return switch (value) {
-            case null -> "None";
+            case null -> "none";
             case ArrayCell arr -> {
                 StringJoiner sj = new StringJoiner(", ", "[", "]");
                 for (Cell cell : arr.elements()) {
