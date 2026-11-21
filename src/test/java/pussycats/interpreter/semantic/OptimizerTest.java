@@ -372,13 +372,6 @@ class OptimizerTest {
         assertInstanceOf(Statement.PrintStatement.class, block.statements().getFirst());
     }
 
-    @Test
-    @DisplayName("Pure expression statement is removed")
-    void pureExpressionStatementRemoved() {
-        // Expression statements don't exist in D, so this test is not applicable
-        // Skip this test
-    }
-
     /* ============ empty loop removal ============ */
 
     @Test

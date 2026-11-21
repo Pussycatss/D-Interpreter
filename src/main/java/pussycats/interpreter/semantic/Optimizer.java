@@ -29,8 +29,6 @@ public class Optimizer {
             case Statement.VarDecl v -> new Statement.VarDecl(v.name(), (Expression) optimize(v.init()), v.loc());
             case Statement.VarDeclGroup g -> new Statement.VarDeclGroup(
                     g.decls().stream().map(d -> (Statement.VarDecl) optimize(d)).toList(), g.loc());
-            case Statement.ExpressionStatement e -> new Statement.ExpressionStatement(
-                    (Expression) optimize(e.expression()), e.loc());
             // The target of an assignment is an lvalue: it must not be folded into a value
             case Statement.Assign a -> new Statement.Assign(optimizeLvalue(a.target()),
                     (Expression) optimize(a.value()), a.loc());
@@ -446,7 +444,6 @@ public class Optimizer {
             }
             case Statement.ReturnStatement r -> collectUsed(r.value(), used);
             case Statement.PrintStatement p -> p.values().forEach(v -> collectUsed(v, used));
-            case Statement.ExpressionStatement e -> collectUsed(e.expression(), used);
             default -> {
             }
         }
@@ -476,9 +473,6 @@ public class Optimizer {
                         case Statement.Assign a -> {
                             if (!isDeadAssign(a, used)) kept.add(a);
                         }
-                        case Statement.ExpressionStatement e -> {
-                            if (!isPure(e.expression())) kept.add(e);
-                        }
                         default -> kept.add(s);
                     }
                 }
@@ -505,8 +499,6 @@ public class Optimizer {
             case Statement.VarDeclGroup g -> new Statement.VarDeclGroup(
                     g.decls().stream().map(d -> (Statement.VarDecl) removeUnusedVariables(d, used)).toList(),
                     g.loc());
-            case Statement.ExpressionStatement e -> new Statement.ExpressionStatement(
-                    (Expression) removeUnusedVariables(e.expression(), used), e.loc());
             case Statement.Assign a -> new Statement.Assign(
                     (Expression) removeUnusedVariables(a.target(), used),
                     (Expression) removeUnusedVariables(a.value(), used), a.loc());

@@ -168,10 +168,6 @@ public class AstPrinter {
                 print(f.body(), sb, depth + 1);
             }
             case Statement.ExitStatement ignored -> sb.append("Exit\n");
-            case Statement.ExpressionStatement s -> {
-                sb.append("ExpressionStatement\n");
-                print(s.expression(), sb, depth + 1);
-            }
             case Statement.ReturnStatement r -> {
                 sb.append("Return\n");
                 if (r.value() != null) {

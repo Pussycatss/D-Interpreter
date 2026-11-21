@@ -111,7 +111,6 @@ public class Analyzer {
                 analyze(a.target());
                 analyze(a.value());
             }
-            case Statement.ExpressionStatement es -> analyze(es.expression());
             case Statement.PrintStatement p -> p.values().forEach(this::analyze);
             case Expression.Binary b -> {
                 analyze(b.left());
@@ -192,7 +191,7 @@ public class Analyzer {
         Scope scope = currentScope();
         if (scope.names.contains(v.name())) {
             SourceLocation loc = v.loc() != null ? v.loc() : SourceLocation.UNKNOWN;
-            reporter.report("Declaration error", "Duplicate declaration", "Variable '" + v.name() +
+            reporter.report("DeclarationError", "Duplicate declaration", "Variable '" + v.name() +
                             "' is already defined in this scope", loc, v.name().length());
             return;
         }

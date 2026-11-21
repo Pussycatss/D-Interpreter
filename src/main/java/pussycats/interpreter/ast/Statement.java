@@ -6,7 +6,6 @@ public sealed interface Statement extends Node {
     record VarDecl(String name, Expression init, SourceLocation loc)                            implements Statement {}
     record VarDeclGroup(List<VarDecl> decls, SourceLocation loc)                                implements Statement {}
     record Assign(Expression target, Expression value, SourceLocation loc)                      implements Statement {}
-    record ExpressionStatement(Expression expression, SourceLocation loc)                       implements Statement {}
     record PrintStatement(List<Expression> values, SourceLocation loc)                          implements Statement {}
 
     record IfStatement(Expression cond, Statement then, Statement otherwise, SourceLocation loc) implements Statement {}
