@@ -45,8 +45,13 @@ public class Analyzer {
                 scopes.pop();
             }
             case Statement.VarDecl v -> {
-                analyze(v.init());
-                checkVariableDeclaration(v);
+                if (v.init() instanceof Expression.FuncLit) {
+                    checkVariableDeclaration(v);
+                    analyze(v.init());
+                } else {
+                    analyze(v.init());
+                    checkVariableDeclaration(v);
+                }
             }
             case Statement.VarDeclGroup group -> group.decls().forEach(this::analyze);
             case Statement.ExitStatement e -> checkExitStatement(e);
