@@ -346,7 +346,7 @@ public class Interpreter {
             case Statement.LoopStatement l -> interpretLoopStatement(l);
             case Statement.ForRangeStatement f -> interpretForRangeStatement(f);
             case Statement.ForInStatement f -> interpretForInStatement(f);
-            case Statement.ExitStatement e -> interpretExitStatement(e);
+            case Statement.ExitStatement _ -> interpretExitStatement();
             case Statement.ReturnStatement r -> interpretReturnStatement(r);
             case Statement.Block b -> interpretBlock(b);
         };
@@ -412,9 +412,12 @@ public class Interpreter {
                 yield sj.toString();
             }
             case TupleCell tuple -> {
-                StringJoiner sj = new StringJoiner(", ", "(", ")");
+                StringJoiner sj = new StringJoiner(", ", "{", "}");
                 for (TupleCell.Entry entry : tuple.entries()) {
-                    sj.add(entry.name() + " = " + formatValue(entry.cell().get()));
+                    String v = formatValue(entry.cell().get());
+                    sj.add(entry.name() == null
+                            ? v
+                            : entry.name() + " := " + v);
                 }
                 yield sj.toString();
             }
@@ -515,7 +518,7 @@ public class Interpreter {
         return null;
     }
 
-    private Object interpretExitStatement(Statement.ExitStatement e) {
+    private Object interpretExitStatement() {
         return new Signal.ExitSignal();
     }
 
