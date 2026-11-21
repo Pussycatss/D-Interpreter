@@ -1,5 +1,6 @@
 package pussycats.interpreter.runtime;
 
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -7,7 +8,7 @@ import java.util.List;
  * (Cell), not a raw object, so a tuple field can be an l-cell
  * (subject to whatever mutability policy interpretAssign adopts — see note).
  */
-public record TupleCell(List<Entry> entries) {
+public record TupleCell(List<Entry> entries) implements Iterable<TupleCell.Entry> {
     /**
      * name may be null for positional-only entries.
      */
@@ -28,4 +29,10 @@ public record TupleCell(List<Entry> entries) {
         }
         return null;
     }
+
+    @Override
+    public Iterator<Entry> iterator() {
+        return entries.iterator();
+    }
+
 }

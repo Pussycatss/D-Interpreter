@@ -202,11 +202,21 @@ public class Interpreter {
                 // the merged ArrayCell shares the element cells with l and r.
                 // Given c = a + b, c[0] = 99 would also change a[0].
             }
-            if (left instanceof TupleCell(List<TupleCell.Entry> entries1) &&
-                    right instanceof TupleCell(List<TupleCell.Entry> entries)) {
-                List<TupleCell.Entry> merged = new ArrayList<>(entries1.size() + entries.size());
-                merged.addAll(entries1);
-                merged.addAll(entries);
+            if (left instanceof TupleCell l && right instanceof TupleCell r) {
+                List<TupleCell.Entry> merged = new ArrayList<>(l.size() + r.size());
+                Set<String> names = new HashSet<>();
+                for (TupleCell.Entry entry : l.entries()) {
+                    if (entry.name() != null && !names.add(entry.name())) {
+                        return fail(b, "Duplicate tuple field: " + entry.name());
+                    }
+                    merged.add(entry);
+                }
+                for (TupleCell.Entry entry : r.entries()) {
+                    if (entry.name() != null && !names.add(entry.name())) {
+                        return fail(b, "Duplicate tuple field: " + entry.name());
+                    }
+                    merged.add(entry);
+                }
                 return new TupleCell(merged);
             }
         }
@@ -258,12 +268,8 @@ public class Interpreter {
     }
 
     private boolean valuesEqual(Object left, Object right, Node node) {
-        // TODO: Decide if we throw an error or not
         if (left == null || right == null) {
             return fail(node, "Value 'none' cannot be used as an operand of equality");
-        }
-        if (left instanceof FunctionCell || right instanceof FunctionCell) {
-            return fail(node, "Function cannot be used as an operand of equality");
         }
         if (left instanceof BigInteger l && right instanceof BigInteger r) {
             return l.equals(r);
@@ -271,7 +277,7 @@ public class Interpreter {
         if (left instanceof Number l && right instanceof Number r) {
             return l.doubleValue() == r.doubleValue();
         }
-        return Objects.equals(left, right);
+        return fail(node, "Equality comparison is only supported for numbers");
     }
 
     private Object logic(Expression.Binary b, Object left, Object right) {
@@ -576,7 +582,11 @@ public class Interpreter {
             StackFrame loopFrame = new StackFrame(outer, f.loc());
             frameStack.add(loopFrame);
             try {
-                Object value = element instanceof Cell cell ? cell.get() : element;
+                Object value = switch (element) {
+                    case Cell cell -> cell.get();
+                    case TupleCell.Entry entry -> entry.cell().get();
+                    default -> element;
+                };
                 loopFrame.setVariable(f.var(), new MutableCell(value, f.loc()));
 
                 Object result = interpretBlock(f.body());
