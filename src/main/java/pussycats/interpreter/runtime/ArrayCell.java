@@ -1,5 +1,7 @@
 package pussycats.interpreter.runtime;
 
+import pussycats.interpreter.ast.SourceLocation;
+
 import java.util.Iterator;
 import java.util.List;
 
@@ -24,5 +26,11 @@ public record ArrayCell(List<Cell> elements) implements Iterable<Cell> {
     @Override
     public Iterator<Cell> iterator() {
         return elements.iterator();
+    }
+
+    void growTo(int newSize, SourceLocation loc) {
+        while (elements.size() < newSize) {
+            elements.add(new MutableCell(null, loc));
+        }
     }
 }

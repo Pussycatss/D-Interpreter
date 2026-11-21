@@ -80,8 +80,11 @@ public class Interpreter {
         } catch (ArithmeticException e) {
             return fail(idx, "Index must be an integer");
         }
-        if (i < 1 || i > arr.size()) {
-            return fail(idx, "Index out of bounds");
+        if (i < 1) {
+            return fail(idx, "Index must be >= 1");
+        }
+        if (i > arr.size()) {
+            arr.growTo(i, idx.loc());
         }
         return arr.get(i - 1);
     }
@@ -276,6 +279,9 @@ public class Interpreter {
         // TODO: Decide if we throw an error or not
         if (left == null || right == null) {
             return fail(node, "Value 'none' cannot be used as an operand of equality");
+        }
+        if (left instanceof FunctionCell || right instanceof FunctionCell) {
+            return fail(node, "Function cannot be used as an operand of equality");
         }
         if (left instanceof BigInteger l && right instanceof BigInteger r) {
             return l.equals(r);
