@@ -26,6 +26,7 @@ public final class Lexer {
     private int line = 1;
     private int column = 1;
     private int startTokenColumn = 1;
+    private boolean after_dot = false;
 
     public Lexer(String source, String sourceName) {
         this.source = source;
@@ -71,7 +72,10 @@ public final class Lexer {
             case '{' -> addToken(TokenType.LBRACE);
             case '}' -> addToken(TokenType.RBRACE);
             case ',' -> addToken(TokenType.COMMA);
-            case ';' -> addToken(TokenType.SEMICOLON);
+            case ';' -> {
+                addToken(TokenType.SEMICOLON);
+                after_dot = false;
+            }
 
             case '+' -> addToken(TokenType.PLUS);
             case '-' -> addToken(TokenType.MINUS);
@@ -92,6 +96,7 @@ public final class Lexer {
                     addToken(TokenType.RANGE);
                 } else {
                     addToken(TokenType.DOT);
+                    after_dot = true;
                 }
             }
 
@@ -133,6 +138,12 @@ public final class Lexer {
         while (isDigit(peek())) {
             advance();
         }
+        String text = source.substring(start, current);
+
+        if (after_dot) {
+            addToken(TokenType.INTEGER, new BigInteger(text));
+            return;
+        }
 
         boolean isReal = false;
         if (peek() == '.' && isDigit(peekNext())) {
@@ -141,7 +152,6 @@ public final class Lexer {
             while (isDigit(peek()));
         }
 
-        String text = source.substring(start, current);
         if (isReal) {
             addToken(TokenType.REAL, Double.parseDouble(text));
         } else {
@@ -210,6 +220,7 @@ public final class Lexer {
         line++;
         column = 1;
         tokens.add(new Token(TokenType.NEWLINE, "\\n", null, line - 1, startTokenColumn));
+        after_dot = false;
     }
 
     private boolean isAtEOF() {
