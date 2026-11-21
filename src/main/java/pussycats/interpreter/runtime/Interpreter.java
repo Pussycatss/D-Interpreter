@@ -486,13 +486,21 @@ public class Interpreter {
                 !(toCell.get() instanceof BigInteger to)) {
             return fail(f, "For range bounds must be integers");
         }
+        StackFrame outer = frameStack.getLast();
         for (BigInteger i = from; i.compareTo(to) <= 0; i = i.add(BigInteger.ONE)) {
-            Object result = interpretBlock(f.body());
-            if (result instanceof Signal.ExitSignal) {
-                break;
-            }
-            if (result instanceof Signal) {
-                return result;
+            StackFrame loopFrame = new StackFrame(outer, f.loc());
+            frameStack.add(loopFrame);
+            try {
+                loopFrame.setVariable(f.var(), new MutableCell(i, f.loc()));
+                Object result = interpretBlock(f.body());
+                if (result instanceof Signal.ExitSignal) {
+                    break;
+                }
+                if (result instanceof Signal) {
+                    return result;
+                }
+            } finally {
+                frameStack.removeLast();
             }
         }
         return null;
