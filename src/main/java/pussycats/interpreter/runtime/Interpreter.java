@@ -414,6 +414,7 @@ public class Interpreter {
     private String formatValue(Object value) {
         return switch (value) {
             case null -> "none";
+            case FunctionCell _ -> "<function>";
             case ArrayCell arr -> {
                 StringJoiner sj = new StringJoiner(", ", "[", "]");
                 for (Cell cell : arr.elements()) {
