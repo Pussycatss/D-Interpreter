@@ -21,7 +21,7 @@
 The program is a sequence of statements. Statements can be separated by the semicolon character or by newline characters.
 
 ```
-Program : { Statement [ ; ] }
+Program : { Statement ( ";" | NEWLINE ) }
 ```
 
 Statements execute one after the other, starting with the first in text statement.
@@ -35,10 +35,8 @@ Declaration of a variable could be in any position within in the program. A vari
 If a certain scope contains other (nested) scopes, then variables declared in a nested scope may have names that match the names in the enclosing scope. In this case, variables from the nested scope hide variables with the same names from the enclosing scope.
 
 ```
-Declaration
-: var VariableDefinition { , VariableDefinition }
-VariableDefinition
-: IDENT [ := Expression ]
+Declaration : "var" VariableDefinition { "," VariableDefinition }
+VariableDefinition : IDENT [ ":=" Expression ]
 ```
 
 When declaring a variable, you can set its initial value. The initial value of a variable can subsequently be changed using the assignment operator. If the initial value of the variable is not set, then it is considered that the variable has the special value none. Value empty cannot act as an operand of operations; the only action on a variable with this value is type checking using the is operation, see below.
@@ -49,36 +47,17 @@ The type of the variable is not fixed during declaration. This means that a vari
 The language defines a common set of common statements: except of the declarations, which is also have a status of statements, there are assignment, conditional statement, two kinds of repeat statements and also function return statement and the print statement.
 
 ```
-Statement
-: Declaration
-| Assignment
-| If
-| IfShort
-| Loop
-| Exit
-| Return
-| Print
-Assignment
-: Reference := Expression
-If
-: if Expression then Body [ else Body ] end
-IfShort
-: if Expression => Body
-Body
-: Statement { [ ; ] Statement }
-Loop
-: WhileLoop
-| ForLoop
-WhileLoop
-: while Expression LoopBody
-ForLoop
-: [ ForHeader ] LoopBody
-ForHeader
-: for [ IDENT in ] Expression [ .. Expression ]
-LoopBody
-: loop Body end
-Exit
-: exit
+Statement : Declaration | Assignment | If | IfShort | Loop | Exit | Return | Print
+Assignment : Reference ":=" Expression
+If : "if" Expression "then" Body [ "else" Body ] "end"
+IfShort : "if" Expression "=>" Body
+Body : Statement [ ( ";" | NEWLINE ) Statement ]
+Loop : WhileLoop | ForLoop
+WhileLoop : "while" Expression LoopBody
+ForLoop : [ ForHeader ] LoopBody
+ForHeader : "for" [ IDENT "in" ] Expression [ ".." Expression ]
+LoopBody : "loop" Body "end"
+Exit : "exit"
 ```
 
 Notice that the ForHeader part in the for-loop can be omitted. In that case, the loop is infinite. The only way for exiting such a loop is exit statement.
@@ -112,10 +91,8 @@ end
 Return statement performs leaving a function perhaps with returning a result value to the calling context.
 
 ```
-Return
-: return [ Expression ]
-Print
-: print Expression { , Expression }
+Return : "return" [ Expression ]
+Print : "print" Expression { "," Expression }
 ```
 
 ## Expressions
@@ -125,60 +102,30 @@ Expression is a syntax constructs defining an algorithm for calculating new valu
 The structure of expressions is traditional and includes several types of operands and a set of infix and prefix operations on operands.
 
 ```
-Expression
-: Relation { ( or | and | xor ) Relation }
-Relation
-: Factor [ ( < | <= | > | >= | = | /= ) Factor ]
-Factor
-: Term { [ + | - ] Term }
-Term
-: Unary { ( * | / ) Unary }
-Unary
-: Reference
-| Reference is TypeIndicator
-| [ + | - | not ] Primary
-Primary
-: Literal
-| FunctionLiteral
-| ( Expression )
-TypeIndicator
-: int
-| real
-```
-
-
-```
-| bool
-| string
-| none // no type
-| [ ] // vector type
-| { } // tuple type
-| func // functional type
+Expression : Relation { ( "or" | "and" | "xor" ) Relation }
+Relation : IsExpr [ ( "<" | "<=" | ">" | ">=" | "=" | "/=" ) IsExpr ]
+IsExpr : Term [ "is" TypeIndicator ]
+Term : Factor { ( "+" | "-" ) Factor }
+Factor : Unary { ( "*" | "/" ) Unary }
+Unary : Primary | [ "+" | "-" | "not" ] Unary
+Primary : Atom { PostfixOp }
+Atom : Literal | FunctionLiteral | IDENT | "(" Expression ")"
+PostFixOp : "[" Expression "]" | "(" [ Expression { "," Expression } ] ")" | "." IDENT | "." IntegerLiteral
+TypeIndicator : "int" | "real" | "bool" | "string" | "none" | "[" "]" | "{" "}" | "func"
 ```
 
 Functions in the D language are treated as literals (similarly to integer/real constants) in the sense that they are considered as constant values that can be assigned to variables and passed as arguments to other functions. The only operation defined for functions is a call.
 
 ```
-FunctionLiteral
-: func [ ( IDENT { , IDENT } ) ] FunBody
-FunBody
-: is Body end
-| => Expression
-Literal
-: IntegerLiteral
-| RealLiteral
-| BooleanLiteral
+FunctionLiteral : "func" [ "(" [ IDENT { "," IDENT } ] ")" ] FunBody
+FunBody : "is" Body "end" | "=>" Expression
+Literal : IntegerLiteral | RealLiteral | StringLiteral | BooleanLiteral | ArrayLiteral | TupleLiteral | "none"
 ```
 
 The Reference production defines accessors – constructs that specify elementary actions with variables: taking an array element, calling a function, and accessing elements of objects. References can be operands of expressions, and also (this distinguishes them from other operands - constants, subexpressions, etc.) act as recipients of values in assignment operators.
 
 ```
-Reference
-: IDENT
-| Reference [ Expression ] // array element
-| Reference ( Expression { , Expression } ) // call
-| Reference . IDENT // tuple element
-| Reference . IntegerLiteral // tuple element
+Reference : IDENT { PostfixOp }
 ```
 
 ## Types and literals
@@ -190,21 +137,10 @@ Simple types: integer, real, string, and boolean.
 Integer literals are written as a sequence of decimal digits. Real literals are formed as two sequences of decimal digits separated by the dot character. The first sequence denotes the integer part of the real, the second sequence - its fractional part. Strings are specified as a sequence of arbitrary characters enclosed in single or double quotes. Boolean values are represented by two keywords true and false.
 
 ```
-Literal
-: INTEGER
-| REAL
-| STRING
-| Boolean
-| Tuple // { a := 5, b := "sss", 12.34 }
-| Array // [ 1, 2, 3 ]
-| none
-```
-
-
-```
-Boolean
-: true
-| false
+BooleanLiteral : true | false
+IntegerLiteral: DIGIT { DIGIT }
+RealLiteral   : DIGIT { DIGIT } "." DIGIT { DIGIT }
+StringLiteral : '"' { CHAR } '"' | "'" { CHAR } "'"
 ```
 
 In addition to simple types, the language includes two composite types: arrays and tuples.
@@ -212,8 +148,7 @@ In addition to simple types, the language includes two composite types: arrays a
 Array is a linear composition of values of any type. The size of the array (number of elements) is not fixed and can be dynamically changed. The array is presented as a list of element values, separated by commas and enclosed in square brackets.
 
 ```
-Array
-: [ [ Expression { , Expression } ] ]
+ArrayLiteral : "[" [ Expression { "," Expression } ] "]"
 ```
 
 Access to the elements of the array is performed in the usual way: after the name of the array in square brackets, the number of the element in the form of an integer expression is specified. The numbering of the elements of the array begins with one.
@@ -230,10 +165,8 @@ t[1000] := {a:=1,b:=2.7};
 Tuple is a fixed-size collection of possibly named values of arbitrary types. Element names, if they are specified, are unique within the tuple. A tuple is specified as a comma-separated list of pairs of the form name := value. The name and value are separated by the assignment token :=. The entire list is enclosed in braces.
 
 ```
-Tuple
-: { TupleElement { , TupleElement } }
-TupleElement
-: [ Identifier := ] Expression
+TupleLiteral : "{" [ TupleElement { "," TupleElement } ] "}"
+TupleElement : [ IDENT ":=" ] Expression
 ```
 
 The structure of tuples, unlike arrays, cannot be modified; the only way to change the composition of the tuple elements is to add another tuple to it, for example:
