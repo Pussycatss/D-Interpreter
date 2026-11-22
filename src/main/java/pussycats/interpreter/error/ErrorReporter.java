@@ -41,7 +41,8 @@ public final class ErrorReporter {
         if (tooManyErrors()) {
             return;
         }
-        errors.add(new DiagnosticError(message, suggestion, source, filename, line, column, length, errorType, null));
+        errors.add(new DiagnosticError(message, suggestion, source, filename, line, column, length, errorType,
+                null, "<module>"));
     }
 
     public void report(InterpretationException exception) {
@@ -58,7 +59,8 @@ public final class ErrorReporter {
                 span.start().column(),
                 span.length(),
                 "RuntimeError",
-                exception.getCallStack()
+                exception.getCallStack(),
+                exception.getFunctionName()
         ));
     }
 
@@ -80,7 +82,6 @@ public final class ErrorReporter {
         for (DiagnosticError e : errors) {
             sb.append(e.format()).append("\n\n");
         }
-        errors.clear();
         return sb.toString();
     }
 }

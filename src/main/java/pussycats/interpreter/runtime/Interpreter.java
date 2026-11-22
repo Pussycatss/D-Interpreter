@@ -7,6 +7,8 @@ import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.lexer.TokenType;
 
 import java.math.BigInteger;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Paths;
 import java.util.*;
 
 public class Interpreter {
@@ -14,16 +16,22 @@ public class Interpreter {
     private final List<StackFrame> frameStack;
     private final List<CallStackFrame> callStack;
     private final Deque<String> functionNames;
+    private final String sourceName;
 
     private static final int MAX_CALL_DEPTH = 256;
 
-    public Interpreter() {
+    public Interpreter(String filename) {
         this.globalFrame = new StackFrame();
         this.frameStack = new ArrayList<>();
         this.frameStack.add(globalFrame);
         this.callStack = new ArrayList<>();
         this.functionNames = new ArrayDeque<>();
         this.functionNames.addLast("<module>");
+        this.sourceName = captureSourceName(filename);
+    }
+
+    public Interpreter() {
+        this(null);
     }
 
     public Object interpret(Node node) {
@@ -125,7 +133,7 @@ public class Interpreter {
         }
         StackFrame newFrame = new StackFrame(closure);
         frameStack.add(newFrame);
-        callStack.add(new CallStackFrame(name, c.span())); // TODO: improve length
+        callStack.add(new CallStackFrame(functionNames.getLast(), c.span(), sourceName));
         functionNames.addLast(name);
         try {
             for (int i = 0; i < params.size(); i++) {
@@ -510,7 +518,7 @@ public class Interpreter {
                     active.remove(tuple);
                 }
             }
-            case String s -> "\"" + s + "\"";
+            case String s -> s;
             default -> String.valueOf(value);
         };
     }
@@ -653,12 +661,33 @@ public class Interpreter {
         }
     }
 
+    static String captureSourceName(String raw) {
+        if (raw == null || raw.isEmpty()) {
+            return CallStackFrame.UNKNOWN_SOURCE;
+        }
+        if (raw.startsWith("<") && raw.endsWith(">")) {
+            return raw;
+        }
+        boolean windowsDrive = raw.length() >= 3
+                && Character.isLetter(raw.charAt(0))
+                && raw.charAt(1) == ':'
+                && (raw.charAt(2) == '\\' || raw.charAt(2) == '/');
+        if (!windowsDrive && raw.matches("^[A-Za-z][A-Za-z0-9+.-]*:.*")) {
+            return raw;
+        }
+        try {
+            return Paths.get(raw).toAbsolutePath().normalize().toString();
+        } catch (InvalidPathException e) {
+            return raw;
+        }
+    }
+
     private Cell evaluate(Expression expr) {
         Object result = interpretExpression(expr);
         return (Cell) result;
     }
 
     private <T> T fail(Node n, String message) {
-        throw new InterpretationException(n.span(), message, callStack, functionNames.getLast());
+        throw new InterpretationException(n.span(), message, callStack, functionNames.getLast(), sourceName);
     }
 }

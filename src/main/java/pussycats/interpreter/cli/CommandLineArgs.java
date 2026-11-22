@@ -143,7 +143,7 @@ public class CommandLineArgs implements Callable<Integer> {
         // ---- Interpreter ----
         System.out.println("=== Execution ===");
 
-        Interpreter interpreter = new Interpreter();
+        Interpreter interpreter = new Interpreter(sourceName);
 
         try {
             interpreter.interpret(optimizedAst);

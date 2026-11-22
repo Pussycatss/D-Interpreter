@@ -13,8 +13,9 @@ public class InterpretationException extends InterpreterException {
             SourceSpan span,
             String message,
             List<CallStackFrame> callStack,
-            String functionName) {
-        super(message, null, null, span);
+            String functionName,
+            String sourceName) {
+        super(message, null, sourceName, span);
         this.callStack = List.copyOf(callStack);
         this.functionName = functionName;
     }

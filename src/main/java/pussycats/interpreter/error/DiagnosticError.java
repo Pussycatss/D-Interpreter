@@ -2,28 +2,23 @@ package pussycats.interpreter.error;
 
 import pussycats.interpreter.runtime.CallStackFrame;
 
-import java.nio.file.InvalidPathException;
 import java.nio.file.Paths;
 import java.util.List;
 
 public record DiagnosticError(String message, String suggestion, String source, String filename,
-                              int line, int column, int length, String errorType, List<CallStackFrame> callStack) {
+                              int line, int column, int length, String errorType, List<CallStackFrame> callStack,
+                              String functionName) {
     public DiagnosticError {
         callStack = callStack == null ? List.of() : List.copyOf(callStack);
     }
 
     public String format() {
         StringBuilder sb = new StringBuilder("Traceback (most recent call last):\n");
-        String path;
-        try {
-            path = Paths.get(filename).toString();
-        } catch (InvalidPathException e) {
-            path = filename;
-        }
         for (CallStackFrame frame : callStack) {
-            int frameLine = frame.span().start().line();
+            var start = frame.span().start();
+            int frameLine = start.line();
             sb.append("  File \"")
-                    .append(path)
+                    .append(toTracebackPath(frame.sourceName()))
                     .append("\", line ")
                     .append(frameLine)
                     .append(", in ")
@@ -32,14 +27,15 @@ public record DiagnosticError(String message, String suggestion, String source, 
             appendSourceLine(
                     sb,
                     frameLine,
-                    frame.span().start().column(),
+                    start.column(),
                     frame.span().length()
             );
         }
         sb.append("  File \"")
-                .append(path)
+                .append(toTracebackPath(filename))
                 .append("\", line ")
                 .append(line)
+                .append(", in ").append(functionName)
                 .append('\n');
         appendSourceLine(sb, line, column, length);
         sb.append(errorType).append(": ").append(message);
@@ -47,6 +43,22 @@ public record DiagnosticError(String message, String suggestion, String source, 
             sb.append('\n').append("  hint: ").append(suggestion);
         }
         return sb.toString();
+    }
+
+    private static String toTracebackPath(String name) {
+        if (name == null) return "<unknown>";
+        if (name.isEmpty()) return name;
+        if (name.startsWith("<") && name.endsWith(">")) return name;
+        if (name.startsWith("file:") || name.startsWith("jrt:")
+                || name.startsWith("jar:") || name.startsWith("http:")
+                || name.startsWith("https:")) {
+            return name;
+        }
+        try {
+            return Paths.get(name).toAbsolutePath().normalize().toString();
+        } catch (IllegalArgumentException e) {
+            return name;
+        }
     }
 
     private void appendSourceLine(StringBuilder sb, int line, int column, int length) {
