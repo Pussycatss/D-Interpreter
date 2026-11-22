@@ -2,7 +2,7 @@ package pussycats.interpreter.error;
 
 import pussycats.interpreter.runtime.CallStackFrame;
 
-import java.nio.file.Path;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Paths;
 import java.util.List;
 
@@ -14,7 +14,12 @@ public record DiagnosticError(String message, String suggestion, String source, 
 
     public String format() {
         StringBuilder sb = new StringBuilder("Traceback (most recent call last):\n");
-        Path path = Paths.get(filename).toAbsolutePath();
+        String path;
+        try {
+            path = Paths.get(filename).toString();
+        } catch (InvalidPathException e) {
+            path = filename;
+        }
         for (CallStackFrame frame : callStack) {
             int frameLine = frame.span().start().line();
             sb.append("  File \"")
