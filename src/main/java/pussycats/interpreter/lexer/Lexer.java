@@ -155,6 +155,7 @@ public final class Lexer {
             while (isDigit(peek()));
         }
 
+        text = source.substring(start, current);
         if (isReal) {
             addToken(TokenType.REAL, Double.parseDouble(text));
         } else {
