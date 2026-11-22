@@ -1,6 +1,6 @@
 package pussycats.interpreter.runtime;
 
-import pussycats.interpreter.ast.SourceLocation;
+import pussycats.interpreter.SourceLocation;
 
 /**
  * Control-flow signals. These are NOT errors — they represent normal control

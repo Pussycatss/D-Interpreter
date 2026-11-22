@@ -1,6 +1,6 @@
 package pussycats.interpreter.runtime;
 
-import pussycats.interpreter.ast.SourceLocation;
+import pussycats.interpreter.SourceLocation;
 
 import java.util.Iterator;
 import java.util.List;

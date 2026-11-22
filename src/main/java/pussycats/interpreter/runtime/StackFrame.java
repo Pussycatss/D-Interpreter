@@ -1,7 +1,5 @@
 package pussycats.interpreter.runtime;
 
-import pussycats.interpreter.ast.SourceLocation;
-
 import java.util.HashMap;
 import java.util.Map;
 
@@ -9,13 +7,13 @@ public class StackFrame {
     private final Map<String, Cell> variables;
     private final StackFrame parent;
 
-    public StackFrame(StackFrame parent, SourceLocation loc) {
+    public StackFrame(StackFrame parent) {
         this.parent = parent;
         this.variables = new HashMap<>();
     }
 
-    public StackFrame(SourceLocation loc) {
-        this(null, loc);
+    public StackFrame() {
+        this(null);
     }
     
     public Cell getVariable(String name) {
@@ -23,10 +21,9 @@ public class StackFrame {
         if (cell != null) {
             return cell;
         }
-        if (parent != null) {
-            return parent.getVariable(name);
-        }
-        throw new RuntimeException("Undefined variable: " + name);
+        return parent != null
+                ? parent.getVariable(name)
+                : null;
     }
 
     public boolean containsLocal(String name) {

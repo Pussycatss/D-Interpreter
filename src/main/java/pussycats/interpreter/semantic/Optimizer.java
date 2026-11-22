@@ -1,8 +1,8 @@
 package pussycats.interpreter.semantic;
 
+import pussycats.interpreter.SourceSpan;
 import pussycats.interpreter.ast.Expression;
 import pussycats.interpreter.ast.Node;
-import pussycats.interpreter.ast.SourceLocation;
 import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.lexer.TokenType;
 
@@ -26,24 +26,24 @@ public class Optimizer {
             case Expression.Unary u -> optimizeUnary(u);
             case Statement.IfStatement i -> optimizeIf(i);
             case Statement.Block b -> optimizeBlock(b);
-            case Statement.VarDecl v -> new Statement.VarDecl(v.name(), (Expression) optimize(v.init()), v.loc());
+            case Statement.VarDecl v -> new Statement.VarDecl(v.name(), (Expression) optimize(v.init()), v.span());
             case Statement.VarDeclGroup g -> new Statement.VarDeclGroup(
-                    g.decls().stream().map(d -> (Statement.VarDecl) optimize(d)).toList(), g.loc());
+                    g.decls().stream().map(d -> (Statement.VarDecl) optimize(d)).toList(), g.span());
             // The target of an assignment is an lvalue: it must not be folded into a value
             case Statement.Assign a -> new Statement.Assign(optimizeLvalue(a.target()),
-                    (Expression) optimize(a.value()), a.loc());
+                    (Expression) optimize(a.value()), a.span());
             case Statement.PrintStatement p -> new Statement.PrintStatement(
-                    p.values().stream().map(v -> (Expression) optimize(v)).toList(), p.loc());
+                    p.values().stream().map(v -> (Expression) optimize(v)).toList(), p.span());
             case Statement.WhileStatement w -> {
                 Expression cond = (Expression) optimize(w.cond());
                 // while false loop ... end -> nothing
                 if (cond instanceof Expression.BoolLit(var value, var ignored) && !value) {
-                    yield new Statement.Block(List.of(), w.loc());
+                    yield new Statement.Block(List.of(), w.span());
                 }
-                yield new Statement.WhileStatement(cond, (Statement.Block) optimize(w.body()), w.loc());
+                yield new Statement.WhileStatement(cond, (Statement.Block) optimize(w.body()), w.span());
             }
             case Statement.ForInStatement f -> new Statement.ForInStatement(f.var(),
-                    (Expression) optimize(f.iterable()), (Statement.Block) optimize(f.body()), f.loc());
+                    (Expression) optimize(f.iterable()), (Statement.Block) optimize(f.body()), f.span());
             case Statement.ForRangeStatement f -> {
                 Expression from = (Expression) optimize(f.from());
                 Expression to = (Expression) optimize(f.to());
@@ -51,27 +51,27 @@ public class Optimizer {
                 if (from instanceof Expression.IntLit(var lo, var ignored1)
                         && to instanceof Expression.IntLit(var hi, var ignored2)
                         && lo.compareTo(hi) > 0) {
-                    yield new Statement.Block(List.of(), f.loc());
+                    yield new Statement.Block(List.of(), f.span());
                 }
-                yield new Statement.ForRangeStatement(f.var(), from, to, (Statement.Block) optimize(f.body()), f.loc());
+                yield new Statement.ForRangeStatement(f.var(), from, to, (Statement.Block) optimize(f.body()), f.span());
             }
             case Statement.LoopStatement l -> new Statement.LoopStatement((Statement.Block) optimize(l.body()),
-                    l.loc());
+                    l.span());
             case Statement.ReturnStatement r -> new Statement.ReturnStatement((Expression) optimize(r.value()),
-                    r.loc());
+                    r.span());
             case Expression.Call c -> new Expression.Call((Expression) optimize(c.callee()),
-                    c.args().stream().map(a -> (Expression) optimize(a)).toList(), c.loc());
+                    c.args().stream().map(a -> (Expression) optimize(a)).toList(), c.span());
             case Expression.ArrayLit a -> new Expression.ArrayLit(
-                    a.elements().stream().map(e -> (Expression) optimize(e)).toList(), a.loc());
+                    a.elements().stream().map(e -> (Expression) optimize(e)).toList(), a.span());
             case Expression.TupleLit t -> new Expression.TupleLit(
                     t.entries().stream().map(e -> new Expression.TupleEntry(e.name(),
-                            (Expression) optimize(e.value()), e.loc())).toList(), t.loc());
+                            (Expression) optimize(e.value()), e.span())).toList(), t.span());
             case Expression.Index idx -> optimizeIndex(idx);
             case Expression.Field fld -> optimizeField(fld);
             case Expression.FieldIndex fld -> optimizeFieldIndex(fld);
             case Expression.IsCheck isc -> new Expression.IsCheck((Expression) optimize(isc.target()), isc.type(),
-                    isc.loc());
-            case Expression.FuncLit f -> new Expression.FuncLit(f.params(), optimize(f.body()), f.isBlock(), f.loc());
+                    isc.span());
+            case Expression.FuncLit f -> new Expression.FuncLit(f.params(), optimize(f.body()), f.isBlock(), f.span());
             default -> node;
         };
     }
@@ -80,7 +80,7 @@ public class Optimizer {
         Expression left = (Expression) optimize(b.left());
         Expression right = (Expression) optimize(b.right());
 
-        Expression folded = foldConstants(b.op(), left, right, b.loc());
+        Expression folded = foldConstants(b.op(), left, right, b.span());
         if (folded != null) {
             return folded;
         }
@@ -88,25 +88,25 @@ public class Optimizer {
         if (simplified != null) {
             return simplified;
         }
-        return new Expression.Binary(left, b.op(), right, b.loc());
+        return new Expression.Binary(left, b.op(), right, b.span());
     }
 
     /** Returns the folded literal, or null if the operands/operator can't be folded. */
-    private Expression foldConstants(TokenType op, Expression left, Expression right, SourceLocation loc) {
+    private Expression foldConstants(TokenType op, Expression left, Expression right, SourceSpan span) {
         if (left instanceof Expression.IntLit(var l, var ignored1) &&
                 right instanceof Expression.IntLit(var r, var ignored2)) {
-            return foldInt(op, l, r, loc);
+            return foldInt(op, l, r, span);
         }
         if (left instanceof Expression.BoolLit(var l, var ignored1) &&
                 right instanceof Expression.BoolLit(var r, var ignored2)) {
-            return foldBool(op, l, r, loc);
+            return foldBool(op, l, r, span);
         }
         if (left instanceof Expression.StringLit(var l, var ignored1) &&
                 right instanceof Expression.StringLit(var r, var ignored2)) {
-            return op == TokenType.PLUS ? new Expression.StringLit(l + r, loc) : null;
+            return op == TokenType.PLUS ? new Expression.StringLit(l + r, span) : null;
         }
         if (op == TokenType.PLUS) {
-            Expression merged = mergeAggregates(left, right, loc);
+            Expression merged = mergeAggregates(left, right, span);
             if (merged != null) {
                 return merged;
             }
@@ -115,49 +115,49 @@ public class Optimizer {
         Double l = asDouble(left);
         Double r = asDouble(right);
         if (l != null && r != null) {
-            return foldReal(op, l, r, loc);
+            return foldReal(op, l, r, span);
         }
         return null;
     }
 
-    private Expression foldInt(TokenType op, BigInteger l, BigInteger r, SourceLocation loc) {
+    private Expression foldInt(TokenType op, BigInteger l, BigInteger r, SourceSpan span) {
         return switch (op) {
-            case PLUS -> new Expression.IntLit(l.add(r), loc);
-            case MINUS -> new Expression.IntLit(l.subtract(r), loc);
-            case ASTERISK -> new Expression.IntLit(l.multiply(r), loc);
+            case PLUS -> new Expression.IntLit(l.add(r), span);
+            case MINUS -> new Expression.IntLit(l.subtract(r), span);
+            case ASTERISK -> new Expression.IntLit(l.multiply(r), span);
             // x / 0 is left for the runtime to report
-            case SLASH -> r.signum() == 0 ? null : new Expression.IntLit(floorDiv(l, r), loc);
-            case LESS -> new Expression.BoolLit(l.compareTo(r) < 0, loc);
-            case LESS_EQUAL -> new Expression.BoolLit(l.compareTo(r) <= 0, loc);
-            case GREATER -> new Expression.BoolLit(l.compareTo(r) > 0, loc);
-            case GREATER_EQUAL -> new Expression.BoolLit(l.compareTo(r) >= 0, loc);
-            case EQUAL -> new Expression.BoolLit(l.equals(r), loc);
-            case NOT_EQUAL -> new Expression.BoolLit(!l.equals(r), loc);
+            case SLASH -> r.signum() == 0 ? null : new Expression.IntLit(floorDiv(l, r), span);
+            case LESS -> new Expression.BoolLit(l.compareTo(r) < 0, span);
+            case LESS_EQUAL -> new Expression.BoolLit(l.compareTo(r) <= 0, span);
+            case GREATER -> new Expression.BoolLit(l.compareTo(r) > 0, span);
+            case GREATER_EQUAL -> new Expression.BoolLit(l.compareTo(r) >= 0, span);
+            case EQUAL -> new Expression.BoolLit(l.equals(r), span);
+            case NOT_EQUAL -> new Expression.BoolLit(!l.equals(r), span);
             default -> null;
         };
     }
 
-    private Expression foldReal(TokenType op, double l, double r, SourceLocation loc) {
+    private Expression foldReal(TokenType op, double l, double r, SourceSpan span) {
         return switch (op) {
-            case PLUS -> realOrNull(l + r, loc);
-            case MINUS -> realOrNull(l - r, loc);
-            case ASTERISK -> realOrNull(l * r, loc);
-            case SLASH -> r == 0.0 ? null : realOrNull(l / r, loc);
-            case LESS -> new Expression.BoolLit(l < r, loc);
-            case LESS_EQUAL -> new Expression.BoolLit(l <= r, loc);
-            case GREATER -> new Expression.BoolLit(l > r, loc);
-            case GREATER_EQUAL -> new Expression.BoolLit(l >= r, loc);
-            case EQUAL -> new Expression.BoolLit(l == r, loc);
-            case NOT_EQUAL -> new Expression.BoolLit(l != r, loc);
+            case PLUS -> realOrNull(l + r, span);
+            case MINUS -> realOrNull(l - r, span);
+            case ASTERISK -> realOrNull(l * r, span);
+            case SLASH -> r == 0.0 ? null : realOrNull(l / r, span);
+            case LESS -> new Expression.BoolLit(l < r, span);
+            case LESS_EQUAL -> new Expression.BoolLit(l <= r, span);
+            case GREATER -> new Expression.BoolLit(l > r, span);
+            case GREATER_EQUAL -> new Expression.BoolLit(l >= r, span);
+            case EQUAL -> new Expression.BoolLit(l == r, span);
+            case NOT_EQUAL -> new Expression.BoolLit(l != r, span);
             default -> null;
         };
     }
 
-    private Expression foldBool(TokenType op, boolean l, boolean r, SourceLocation loc) {
+    private Expression foldBool(TokenType op, boolean l, boolean r, SourceSpan span) {
         return switch (op) {
-            case AND -> new Expression.BoolLit(l && r, loc);
-            case OR -> new Expression.BoolLit(l || r, loc);
-            case XOR -> new Expression.BoolLit(l ^ r, loc);
+            case AND -> new Expression.BoolLit(l && r, span);
+            case OR -> new Expression.BoolLit(l || r, span);
+            case XOR -> new Expression.BoolLit(l ^ r, span);
             default -> null;
         };
     }
@@ -166,19 +166,19 @@ public class Optimizer {
      * [1] + [2] -> [1, 2]; {a := 1} + {b := 2} -> {a := 1, b := 2}.
      * Tuples with a name present on both sides are left alone (the runtime decides what that means).
      */
-    private Expression mergeAggregates(Expression left, Expression right, SourceLocation loc) {
+    private Expression mergeAggregates(Expression left, Expression right, SourceSpan span) {
         if (left instanceof Expression.ArrayLit(var leftElems, var ignored1)
                 && right instanceof Expression.ArrayLit(var rightElems, var ignored2)) {
             List<Expression> all = new ArrayList<>(leftElems);
             all.addAll(rightElems);
-            return new Expression.ArrayLit(all, loc);
+            return new Expression.ArrayLit(all, span);
         }
         if (left instanceof Expression.TupleLit(var leftEntries, var ignored3)
                 && right instanceof Expression.TupleLit(var rightEntries, var ignored4)
                 && !haveCommonNames(leftEntries, rightEntries)) {
             List<Expression.TupleEntry> all = new ArrayList<>(leftEntries);
             all.addAll(rightEntries);
-            return new Expression.TupleLit(all, loc);
+            return new Expression.TupleLit(all, span);
         }
         return null;
     }
@@ -206,7 +206,7 @@ public class Optimizer {
                 return elements.get(i);
             }
         }
-        return new Expression.Index(target, index, idx.loc());
+        return new Expression.Index(target, index, idx.span());
     }
 
     private Node optimizeField(Expression.Field fld) {
@@ -222,7 +222,7 @@ public class Optimizer {
                 }
             }
         }
-        return new Expression.Field(target, fld.name(), fld.loc());
+        return new Expression.Field(target, fld.name(), fld.span());
     }
 
     private Node optimizeFieldIndex(Expression.FieldIndex fld) {
@@ -237,17 +237,17 @@ public class Optimizer {
                 }
             }
         }
-        return new Expression.FieldIndex(target, fld.index(), fld.loc());
+        return new Expression.FieldIndex(target, fld.index(), fld.span());
     }
 
     /** Optimizes the insides of an assignment target without replacing the target itself by a value. */
     private Expression optimizeLvalue(Expression target) {
         return switch (target) {
             case Expression.Index idx -> new Expression.Index((Expression) optimize(idx.target()),
-                    (Expression) optimize(idx.index()), idx.loc());
-            case Expression.Field f -> new Expression.Field((Expression) optimize(f.target()), f.name(), f.loc());
+                    (Expression) optimize(idx.index()), idx.span());
+            case Expression.Field f -> new Expression.Field((Expression) optimize(f.target()), f.name(), f.span());
             case Expression.FieldIndex f -> new Expression.FieldIndex((Expression) optimize(f.target()),
-                    f.index(), f.loc());
+                    f.index(), f.span());
             default -> (Expression) optimize(target);
         };
     }
@@ -286,10 +286,10 @@ public class Optimizer {
 
         if (u.op() == TokenType.MINUS) {
             if (operand instanceof Expression.IntLit(var v, var ignored)) {
-                return new Expression.IntLit(v.negate(), u.loc());
+                return new Expression.IntLit(v.negate(), u.span());
             }
             if (operand instanceof Expression.RealLit(var v, var ignored)) {
-                return new Expression.RealLit(-v, u.loc());
+                return new Expression.RealLit(-v, u.span());
             }
             // -(-x) -> x
             if (operand instanceof Expression.Unary(var innerOp, var inner, var ignored) && innerOp == TokenType.MINUS) {
@@ -299,7 +299,7 @@ public class Optimizer {
 
         if (u.op() == TokenType.NOT) {
             if (operand instanceof Expression.BoolLit(var v, var ignored)) {
-                return new Expression.BoolLit(!v, u.loc());
+                return new Expression.BoolLit(!v, u.span());
             }
             // not not x -> x
             if (operand instanceof Expression.Unary(var innerOp, var inner, var ignored) && innerOp == TokenType.NOT) {
@@ -307,7 +307,7 @@ public class Optimizer {
             }
         }
 
-        return new Expression.Unary(u.op(), operand, u.loc());
+        return new Expression.Unary(u.op(), operand, u.span());
     }
 
     private Node optimizeIf(Statement.IfStatement i) {
@@ -317,11 +317,11 @@ public class Optimizer {
             if (value) {
                 return optimize(i.then());
             }
-            return i.otherwise() != null ? optimize(i.otherwise()) : new Statement.Block(List.of(), i.loc());
+            return i.otherwise() != null ? optimize(i.otherwise()) : new Statement.Block(List.of(), i.span());
         }
 
         return new Statement.IfStatement(cond, (Statement) optimize(i.then()), (Statement) optimize(i.otherwise()),
-                i.loc());
+                i.span());
     }
 
     private Node optimizeBlock(Statement.Block b) {
@@ -343,7 +343,7 @@ public class Optimizer {
             }
         }
 
-        return new Statement.Block(result, b.loc());
+        return new Statement.Block(result, b.span());
     }
 
     private boolean declaresVariables(Statement.Block block) {
@@ -467,7 +467,7 @@ public class Optimizer {
                             if (keptDecls.size() == 1) {
                                 kept.add(keptDecls.getFirst());
                             } else if (!keptDecls.isEmpty()) {
-                                kept.add(new Statement.VarDeclGroup(keptDecls, g.loc()));
+                                kept.add(new Statement.VarDeclGroup(keptDecls, g.span()));
                             }
                         }
                         case Statement.Assign a -> {
@@ -476,63 +476,63 @@ public class Optimizer {
                         default -> kept.add(s);
                     }
                 }
-                yield new Statement.Block(kept, b.loc());
+                yield new Statement.Block(kept, b.span());
             }
             case Statement.IfStatement i -> new Statement.IfStatement(
                     (Expression) removeUnusedVariables(i.cond(), used),
                     (Statement) removeUnusedVariables(i.then(), used),
-                    (Statement) removeUnusedVariables(i.otherwise(), used), i.loc());
+                    (Statement) removeUnusedVariables(i.otherwise(), used), i.span());
             case Statement.WhileStatement w -> new Statement.WhileStatement(
                     (Expression) removeUnusedVariables(w.cond(), used),
-                    (Statement.Block) removeUnusedVariables(w.body(), used), w.loc());
+                    (Statement.Block) removeUnusedVariables(w.body(), used), w.span());
             case Statement.LoopStatement l -> new Statement.LoopStatement(
-                    (Statement.Block) removeUnusedVariables(l.body(), used), l.loc());
+                    (Statement.Block) removeUnusedVariables(l.body(), used), l.span());
             case Statement.ForInStatement f -> new Statement.ForInStatement(f.var(),
                     (Expression) removeUnusedVariables(f.iterable(), used),
-                    (Statement.Block) removeUnusedVariables(f.body(), used), f.loc());
+                    (Statement.Block) removeUnusedVariables(f.body(), used), f.span());
             case Statement.ForRangeStatement f -> new Statement.ForRangeStatement(f.var(),
                     (Expression) removeUnusedVariables(f.from(), used),
                     (Expression) removeUnusedVariables(f.to(), used),
-                    (Statement.Block) removeUnusedVariables(f.body(), used), f.loc());
+                    (Statement.Block) removeUnusedVariables(f.body(), used), f.span());
             case Statement.VarDecl v -> new Statement.VarDecl(v.name(),
-                    (Expression) removeUnusedVariables(v.init(), used), v.loc());
+                    (Expression) removeUnusedVariables(v.init(), used), v.span());
             case Statement.VarDeclGroup g -> new Statement.VarDeclGroup(
                     g.decls().stream().map(d -> (Statement.VarDecl) removeUnusedVariables(d, used)).toList(),
-                    g.loc());
+                    g.span());
             case Statement.Assign a -> new Statement.Assign(
                     (Expression) removeUnusedVariables(a.target(), used),
-                    (Expression) removeUnusedVariables(a.value(), used), a.loc());
+                    (Expression) removeUnusedVariables(a.value(), used), a.span());
             case Statement.ReturnStatement r -> new Statement.ReturnStatement(
-                    (Expression) removeUnusedVariables(r.value(), used), r.loc());
+                    (Expression) removeUnusedVariables(r.value(), used), r.span());
             case Statement.PrintStatement p -> new Statement.PrintStatement(
                     p.values().stream().map(v -> (Expression) removeUnusedVariables(v, used)).toList(),
-                    p.loc());
+                    p.span());
             case Expression.Binary b -> new Expression.Binary(
                     (Expression) removeUnusedVariables(b.left(), used), b.op(),
-                    (Expression) removeUnusedVariables(b.right(), used), b.loc());
+                    (Expression) removeUnusedVariables(b.right(), used), b.span());
             case Expression.Unary u -> new Expression.Unary(u.op(),
-                    (Expression) removeUnusedVariables(u.operand(), used), u.loc());
+                    (Expression) removeUnusedVariables(u.operand(), used), u.span());
             case Expression.Call c -> new Expression.Call(
                     (Expression) removeUnusedVariables(c.callee(), used),
                     c.args().stream().map(a -> (Expression) removeUnusedVariables(a, used)).toList(),
-                    c.loc());
+                    c.span());
             case Expression.ArrayLit a -> new Expression.ArrayLit(
                     a.elements().stream().map(e -> (Expression) removeUnusedVariables(e, used)).toList(),
-                    a.loc());
+                    a.span());
             case Expression.TupleLit t -> new Expression.TupleLit(
                     t.entries().stream().map(e -> new Expression.TupleEntry(e.name(),
-                            (Expression) removeUnusedVariables(e.value(), used), e.loc())).toList(), t.loc());
+                            (Expression) removeUnusedVariables(e.value(), used), e.span())).toList(), t.span());
             case Expression.Index idx -> new Expression.Index(
                     (Expression) removeUnusedVariables(idx.target(), used),
-                    (Expression) removeUnusedVariables(idx.index(), used), idx.loc());
+                    (Expression) removeUnusedVariables(idx.index(), used), idx.span());
             case Expression.Field f -> new Expression.Field(
-                    (Expression) removeUnusedVariables(f.target(), used), f.name(), f.loc());
+                    (Expression) removeUnusedVariables(f.target(), used), f.name(), f.span());
             case Expression.FieldIndex f -> new Expression.FieldIndex(
-                    (Expression) removeUnusedVariables(f.target(), used), f.index(), f.loc());
+                    (Expression) removeUnusedVariables(f.target(), used), f.index(), f.span());
             case Expression.IsCheck isc -> new Expression.IsCheck(
-                    (Expression) removeUnusedVariables(isc.target(), used), isc.type(), isc.loc());
+                    (Expression) removeUnusedVariables(isc.target(), used), isc.type(), isc.span());
             case Expression.FuncLit f -> new Expression.FuncLit(f.params(),
-                    removeUnusedVariables(f.body(), used), f.isBlock(), f.loc());
+                    removeUnusedVariables(f.body(), used), f.isBlock(), f.span());
             default -> node;
         };
     }
@@ -543,7 +543,7 @@ public class Optimizer {
     }
 
     private boolean isDeadAssign(Statement.Assign a, Set<String> used) {
-        return a.target() instanceof Expression.Ident(String name, SourceLocation ignored) &&
+        return a.target() instanceof Expression.Ident(String name, SourceSpan ignored) &&
                 !used.contains(name) && isPure(a.value());
     }
 
@@ -582,8 +582,8 @@ public class Optimizer {
         return d != null && d != 0.0;
     }
 
-    private static Expression realOrNull(double v, SourceLocation loc) {
-        return Double.isFinite(v) ? new Expression.RealLit(v, loc) : null;
+    private static Expression realOrNull(double v, SourceSpan span) {
+        return Double.isFinite(v) ? new Expression.RealLit(v, span) : null;
     }
 
     /** Integer division rounding down, as the language spec requires (BigInteger.divide truncates). */

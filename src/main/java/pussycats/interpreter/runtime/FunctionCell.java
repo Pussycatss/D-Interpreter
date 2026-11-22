@@ -14,5 +14,5 @@ import java.util.List;
  * evaluates to ImmutableCell(new FunctionCell(...)); a variable bound to
  * a function is MutableCell(new FunctionCell(...)).
  */
-public record FunctionCell(List<Expression.Parameter> params, Node body, StackFrame closure) {
+public record FunctionCell(String name, List<Expression.Parameter> params, Node body, StackFrame closure) {
 }

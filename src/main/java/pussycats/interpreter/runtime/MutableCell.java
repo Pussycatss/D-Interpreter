@@ -1,6 +1,6 @@
 package pussycats.interpreter.runtime;
 
-import pussycats.interpreter.ast.SourceLocation;
+import pussycats.interpreter.SourceLocation;
 
 public final class MutableCell implements Cell {
     private Object value;

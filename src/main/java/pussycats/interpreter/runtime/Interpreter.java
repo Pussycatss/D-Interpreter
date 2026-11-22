@@ -2,7 +2,7 @@ package pussycats.interpreter.runtime;
 
 import pussycats.interpreter.ast.Expression;
 import pussycats.interpreter.ast.Node;
-import pussycats.interpreter.ast.SourceLocation;
+import pussycats.interpreter.SourceLocation;
 import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.lexer.TokenType;
 
@@ -12,14 +12,18 @@ import java.util.*;
 public class Interpreter {
     private final StackFrame globalFrame;
     private final List<StackFrame> frameStack;
-    private int callDepth = 0;
+    private final List<CallStackFrame> callStack;
+    private final Deque<String> functionNames;
 
     private static final int MAX_CALL_DEPTH = 256;
 
     public Interpreter() {
-        this.globalFrame = new StackFrame(null, SourceLocation.UNKNOWN);
+        this.globalFrame = new StackFrame();
         this.frameStack = new ArrayList<>();
         this.frameStack.add(globalFrame);
+        this.callStack = new ArrayList<>();
+        this.functionNames = new ArrayDeque<>();
+        this.functionNames.addLast("<module>");
     }
 
     public Object interpret(Node node) {
@@ -103,14 +107,14 @@ public class Interpreter {
     private Object interpretCall(Expression.Call c) {
         Cell calleeCell = evaluate(c.callee());
         if (!(calleeCell.get() instanceof FunctionCell(
-                List<Expression.Parameter> params, Node body, StackFrame closure
+                String name, List<Expression.Parameter> params, Node body, StackFrame closure
         ))) {
             return fail(c, "Cannot call this type");
         }
         if (params.size() != c.args().size()) {
             return fail(c, "Argument count mismatch");
         }
-        if (callDepth >= MAX_CALL_DEPTH) {
+        if (callStack.size() >= MAX_CALL_DEPTH) {
             return fail(c, "Maximum function call depth exceeded: " + MAX_CALL_DEPTH);
         }
 
@@ -119,9 +123,10 @@ public class Interpreter {
             Cell argValue = evaluate(arg);
             argCells.add(new MutableCell(argValue.get(), arg.loc()));
         }
-        StackFrame newFrame = new StackFrame(closure, c.loc());
+        StackFrame newFrame = new StackFrame(closure);
         frameStack.add(newFrame);
-        callDepth++;
+        callStack.add(new CallStackFrame(name, c.span())); // TODO: improve length
+        functionNames.addLast(name);
         try {
             for (int i = 0; i < params.size(); i++) {
                 newFrame.setVariable(params.get(i).name(), argCells.get(i));
@@ -133,6 +138,8 @@ public class Interpreter {
             Object raw = (result instanceof Cell cell) ? cell.get() : result;
             return new ImmutableCell(raw, c.loc());
         } finally {
+            functionNames.removeLast();
+            callStack.removeLast();
             frameStack.removeLast();
         }
     }
@@ -336,8 +343,12 @@ public class Interpreter {
     }
 
     private Object interpretFuncLit(Expression.FuncLit f) {
+        return interpretFuncLit(f, "<anonymous>");
+    }
+
+    private Object interpretFuncLit(Expression.FuncLit f, String name) {
         StackFrame closure = frameStack.getLast();
-        return new ImmutableCell(new FunctionCell(f.params(), f.body(), closure), f.loc());
+        return new ImmutableCell(new FunctionCell(name, f.params(), f.body(), closure), f.loc());
     }
 
     private Object interpretStatement(Statement stmt) {
@@ -366,7 +377,12 @@ public class Interpreter {
         Object value = null;
         SourceLocation valueLoc = vd.loc();
         if (vd.init() != null) {
-            Cell initCell = evaluate(vd.init());
+            Cell initCell;
+            if (vd.init() instanceof Expression.FuncLit f) {
+                initCell = (ImmutableCell) interpretFuncLit(f, vd.name());
+            } else {
+                initCell = evaluate(vd.init());
+            }
             value = initCell.get();
             valueLoc = vd.init().loc();
         }
@@ -557,7 +573,7 @@ public class Interpreter {
         }
         StackFrame outer = frameStack.getLast();
         for (BigInteger i = from; i.compareTo(to) <= 0; i = i.add(BigInteger.ONE)) {
-            StackFrame loopFrame = new StackFrame(outer, f.loc());
+            StackFrame loopFrame = new StackFrame(outer);
             frameStack.add(loopFrame);
             try {
                 loopFrame.setVariable(f.var(), new MutableCell(i, f.loc()));
@@ -586,7 +602,7 @@ public class Interpreter {
 
         StackFrame outer = frameStack.getLast();
         for (Object element : snapshot) {
-            StackFrame loopFrame = new StackFrame(outer, f.loc());
+            StackFrame loopFrame = new StackFrame(outer);
             frameStack.add(loopFrame);
             try {
                 Object value = switch (element) {
@@ -622,7 +638,7 @@ public class Interpreter {
     }
 
     private Object interpretBlock(Statement.Block b) {
-        StackFrame newFrame = new StackFrame(frameStack.getLast(), b.loc());
+        StackFrame newFrame = new StackFrame(frameStack.getLast());
         frameStack.add(newFrame);
         try {
             for (Statement statement : b.statements()) {
@@ -643,6 +659,6 @@ public class Interpreter {
     }
 
     private <T> T fail(Node n, String message) {
-        throw new InterpreterException(n.loc(), message);
+        throw new InterpretationException(n.span(), message, callStack, functionNames.getLast());
     }
 }

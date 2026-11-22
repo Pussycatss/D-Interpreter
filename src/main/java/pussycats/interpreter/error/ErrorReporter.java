@@ -1,6 +1,8 @@
 package pussycats.interpreter.error;
 
-import pussycats.interpreter.ast.SourceLocation;
+import pussycats.interpreter.SourceLocation;
+import pussycats.interpreter.SourceSpan;
+import pussycats.interpreter.runtime.InterpretationException;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,7 +41,25 @@ public final class ErrorReporter {
         if (tooManyErrors()) {
             return;
         }
-        errors.add(new DiagnosticError(message, suggestion, source, filename, line, column, length, errorType));
+        errors.add(new DiagnosticError(message, suggestion, source, filename, line, column, length, errorType, null));
+    }
+
+    public void report(InterpretationException exception) {
+        if (tooManyErrors()) {
+            return;
+        }
+        SourceSpan span = exception.getSpan();
+        errors.add(new DiagnosticError(
+                exception.getMessage(),
+                null,
+                source,
+                filename,
+                span.start().line(),
+                span.start().column(),
+                span.length(),
+                "RuntimeError",
+                exception.getCallStack()
+        ));
     }
 
     public boolean hasErrors() {

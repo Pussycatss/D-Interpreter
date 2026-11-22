@@ -2,7 +2,7 @@ package pussycats.interpreter.semantic;
 
 import pussycats.interpreter.ast.Expression;
 import pussycats.interpreter.ast.Node;
-import pussycats.interpreter.ast.SourceLocation;
+import pussycats.interpreter.SourceLocation;
 import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.error.ErrorReporter;
 
@@ -251,7 +251,7 @@ public class Analyzer {
         Set<String> seenParams = new HashSet<>();
         for (Expression.Parameter param : f.params()) {
             if (!seenParams.add(param.name())) {
-                SourceLocation loc = param.loc();
+                SourceLocation loc = param.span().start();
                 reporter.report("DeclarationError", "Duplicate function parameter", "'" + param.name() +
                                 "' is defined multiple times", loc, param.name().length());
             }
@@ -265,7 +265,7 @@ public class Analyzer {
         Set<String> seenKeys = new HashSet<>();
         for (Expression.TupleEntry entry : t.entries()) {
             if (entry.name() != null && !seenKeys.add(entry.name())) {
-                SourceLocation loc = entry.loc();
+                SourceLocation loc = entry.span().start();
                 reporter.report("DeclarationError", "Duplicate tuple key", "'" + entry.name() +
                         "' is defined multiple times", loc, entry.name().length());
             }

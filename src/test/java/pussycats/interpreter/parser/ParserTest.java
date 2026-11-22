@@ -1,9 +1,10 @@
 package pussycats.interpreter.parser;
 
 import org.junit.jupiter.api.Test;
+import pussycats.interpreter.SourceSpan;
 import pussycats.interpreter.ast.Expression;
 import pussycats.interpreter.ast.Node;
-import pussycats.interpreter.ast.SourceLocation;
+import pussycats.interpreter.SourceLocation;
 import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.lexer.Lexer;
 import pussycats.interpreter.lexer.Token;
@@ -333,7 +334,8 @@ class ParserTest {
 
     @Test void funcWithArrowBody() {
         var f = assertInstanceOf(Expression.FuncLit.class, expr("func(x) => x + 1"));
-        assertEquals(List.of((new Expression.Parameter("x", new SourceLocation(1, 12)))), f.params());
+        assertEquals(List.of((new Expression.Parameter("x", new SourceSpan(new SourceLocation(1, 12),
+                new SourceLocation(1, 13))))), f.params());
         assertFalse(f.isBlock());
         assertInstanceOf(Expression.Binary.class, f.body());
     }

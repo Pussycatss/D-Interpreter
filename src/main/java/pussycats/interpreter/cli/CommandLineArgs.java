@@ -2,7 +2,7 @@ package pussycats.interpreter.cli;
 
 import pussycats.interpreter.ast.AstPrinter;
 import pussycats.interpreter.ast.Node;
-import pussycats.interpreter.ast.SourceLocation;
+import pussycats.interpreter.SourceLocation;
 import pussycats.interpreter.error.ErrorReporter;
 import pussycats.interpreter.lexer.Lexer;
 import pussycats.interpreter.lexer.LexerException;
@@ -12,7 +12,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 import pussycats.interpreter.runtime.Interpreter;
-import pussycats.interpreter.runtime.InterpreterException;
+import pussycats.interpreter.runtime.InterpretationException;
 import pussycats.interpreter.semantic.Optimizer;
 import pussycats.interpreter.semantic.Analyzer;
 
@@ -147,8 +147,8 @@ public class CommandLineArgs implements Callable<Integer> {
 
         try {
             interpreter.interpret(optimizedAst);
-        } catch (InterpreterException e) {
-            reporter.report("RuntimeError", e.getMessage(), e.getLocation());
+        } catch (InterpretationException e) {
+            reporter.report(e);
             System.err.print(reporter.formatAll());
             System.exit(1);
         }
