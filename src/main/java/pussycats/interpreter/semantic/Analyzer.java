@@ -39,6 +39,7 @@ public class Analyzer {
             return;
         }
         switch (node) {
+            case Statement.Import i -> checkImport(i);
             case Statement.Block b -> {
                 scopes.push(new Scope());
                 b.statements().forEach(this::analyze);
@@ -191,6 +192,17 @@ public class Analyzer {
     // ==========================================
     // Semantic Checks
     // ==========================================
+
+    private void checkImport(Statement.Import i) {
+        Scope scope = currentScope();
+        for (String name : i.names()) {
+            if (!scope.names.add(name)) {
+                SourceLocation loc = i.span().start();
+                reporter.report("DeclarationError", "Duplicate declaration",
+                        "Name '" + name + "' is already defined in this scope", loc, name.length());
+            }
+        }
+    }
 
     private void checkVariableDeclaration(Statement.VarDecl v) {
         Scope scope = currentScope();

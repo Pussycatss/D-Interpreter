@@ -23,4 +23,5 @@ public sealed interface Statement extends Node {
             // value may be null
 
     record Block(List<Statement> statements, SourceSpan span)                                    implements Statement {}
+    record Import(List<String> names, String path, SourceSpan span)                              implements Statement {}
 }

@@ -8,30 +8,35 @@ import pussycats.interpreter.lexer.TokenType;
 
 import java.math.BigInteger;
 import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
 public class Interpreter {
     private final StackFrame globalFrame;
-    private final List<StackFrame> frameStack;
+    private StackFrame currentFrame;
     private final List<CallStackFrame> callStack;
     private final Deque<String> functionNames;
-    private final String sourceName;
+    private final Deque<String> sourceNames;
+    private final ModuleLoader moduleLoader;
+    private final Map<Path, StackFrame> modules = new HashMap<>();
+    private final Set<Path> loadingModules = new HashSet<>();
 
     private static final int MAX_CALL_DEPTH = 256;
 
-    public Interpreter(String filename) {
+    public Interpreter(String filename, ModuleLoader moduleLoader) {
         this.globalFrame = new StackFrame();
-        this.frameStack = new ArrayList<>();
-        this.frameStack.add(globalFrame);
+        this.currentFrame = globalFrame;
         this.callStack = new ArrayList<>();
         this.functionNames = new ArrayDeque<>();
         this.functionNames.addLast("<module>");
-        this.sourceName = captureSourceName(filename);
+        this.sourceNames = new ArrayDeque<>();
+        this.sourceNames.addLast(captureSourceName(filename));
+        this.moduleLoader = Objects.requireNonNull(moduleLoader);
     }
 
     public Interpreter() {
-        this(null);
+        this(null, null);
     }
 
     public Object interpret(Node node) {
@@ -68,7 +73,7 @@ public class Interpreter {
     }
 
     private Object getVariable(Expression.Ident id) {
-        Cell v = frameStack.getLast().getVariable(id.name());
+        Cell v = currentFrame.getVariable(id.name());
         return (v == null)
                 ? fail(id, "Undefined variable: " + id.name())
                 : v;
@@ -115,8 +120,7 @@ public class Interpreter {
     private Object interpretCall(Expression.Call c) {
         Cell calleeCell = evaluate(c.callee());
         if (!(calleeCell.get() instanceof FunctionCell(
-                String name, List<Expression.Parameter> params, Node body, StackFrame closure
-        ))) {
+                String name, List<Expression.Parameter> params, Node body, StackFrame closure, String sourceName))) {
             return fail(c, "Cannot call this type");
         }
         if (params.size() != c.args().size()) {
@@ -131,13 +135,14 @@ public class Interpreter {
             Cell argValue = evaluate(arg);
             argCells.add(new MutableCell(argValue.get(), arg.loc()));
         }
-        StackFrame newFrame = new StackFrame(closure);
-        frameStack.add(newFrame);
-        callStack.add(new CallStackFrame(functionNames.getLast(), c.span(), sourceName));
+        StackFrame previous = currentFrame;
+        currentFrame = new StackFrame(closure);
+        callStack.add(new CallStackFrame(functionNames.getLast(), c.span(), sourceNames.getLast()));
         functionNames.addLast(name);
+        sourceNames.addLast(sourceName);
         try {
             for (int i = 0; i < params.size(); i++) {
-                newFrame.setVariable(params.get(i).name(), argCells.get(i));
+                currentFrame.setVariable(params.get(i).name(), argCells.get(i));
             }
             Object result = interpret(body);
             if (result instanceof Signal.ReturnSignal(Cell valueCell, SourceLocation _)) {
@@ -146,9 +151,10 @@ public class Interpreter {
             Object raw = (result instanceof Cell cell) ? cell.get() : result;
             return new ImmutableCell(raw, c.loc());
         } finally {
+            sourceNames.removeLast();
             functionNames.removeLast();
             callStack.removeLast();
-            frameStack.removeLast();
+            currentFrame = previous;
         }
     }
 
@@ -355,8 +361,9 @@ public class Interpreter {
     }
 
     private Object interpretFuncLit(Expression.FuncLit f, String name) {
-        StackFrame closure = frameStack.getLast();
-        return new ImmutableCell(new FunctionCell(name, f.params(), f.body(), closure), f.loc());
+        StackFrame closure = currentFrame;
+        String definingSource = sourceNames.getLast();
+        return new ImmutableCell(new FunctionCell(name, f.params(), f.body(), closure, definingSource), f.loc());
     }
 
     private Object interpretStatement(Statement stmt) {
@@ -373,11 +380,12 @@ public class Interpreter {
             case Statement.ExitStatement _ -> interpretExitStatement();
             case Statement.ReturnStatement r -> interpretReturnStatement(r);
             case Statement.Block b -> interpretBlock(b);
+            case Statement.Import i -> interpretImport(i);
         };
     }
 
     private Object interpretVarDecl(Statement.VarDecl vd) {
-        StackFrame frame = frameStack.getLast();
+        StackFrame frame = currentFrame;
         if (frame.containsLocal(vd.name())) {
             return fail(vd, "Variable already declared in this scope: " + vd.name());
         }
@@ -579,12 +587,12 @@ public class Interpreter {
                 !(toCell.get() instanceof BigInteger to)) {
             return fail(f, "For range bounds must be integers");
         }
-        StackFrame outer = frameStack.getLast();
+        StackFrame outer = currentFrame;
         for (BigInteger i = from; i.compareTo(to) <= 0; i = i.add(BigInteger.ONE)) {
-            StackFrame loopFrame = new StackFrame(outer);
-            frameStack.add(loopFrame);
+            StackFrame previous = currentFrame;
+            currentFrame = new StackFrame(outer);
             try {
-                loopFrame.setVariable(f.var(), new MutableCell(i, f.loc()));
+                currentFrame.setVariable(f.var(), new MutableCell(i, f.loc()));
                 Object result = interpretBlock(f.body());
                 if (result instanceof Signal.ExitSignal) {
                     break;
@@ -593,7 +601,7 @@ public class Interpreter {
                     return result;
                 }
             } finally {
-                frameStack.removeLast();
+                currentFrame = previous;
             }
         }
         return null;
@@ -608,23 +616,23 @@ public class Interpreter {
         List<Object> snapshot = new ArrayList<>();
         elements.forEach(snapshot::add);
 
-        StackFrame outer = frameStack.getLast();
+        StackFrame outer = currentFrame;
         for (Object element : snapshot) {
-            StackFrame loopFrame = new StackFrame(outer);
-            frameStack.add(loopFrame);
+            StackFrame previous = currentFrame;
+            currentFrame = new StackFrame(outer);
             try {
                 Object value = switch (element) {
                     case Cell cell -> cell.get();
                     case TupleCell.Entry entry -> entry.cell().get();
                     default -> element;
                 };
-                loopFrame.setVariable(f.var(), new MutableCell(value, f.loc()));
+                currentFrame.setVariable(f.var(), new MutableCell(value, f.loc()));
 
                 Object result = interpretBlock(f.body());
                 if (result instanceof Signal.ExitSignal) break;
                 if (result instanceof Signal) return result;
             } finally {
-                frameStack.removeLast();
+                currentFrame = previous;
             }
         }
         return null;
@@ -646,8 +654,7 @@ public class Interpreter {
     }
 
     private Object interpretBlock(Statement.Block b) {
-        StackFrame newFrame = new StackFrame(frameStack.getLast());
-        frameStack.add(newFrame);
+        currentFrame = new StackFrame(currentFrame);
         try {
             for (Statement statement : b.statements()) {
                 Object result = interpretStatement(statement);
@@ -657,8 +664,71 @@ public class Interpreter {
             }
             return null;
         } finally {
-            frameStack.removeLast();
+            currentFrame = currentFrame.getParent();
         }
+    }
+
+    private Object interpretImport(Statement.Import i) {
+        Path path = resolveModulePath(i.path());
+        StackFrame moduleFrame = modules.get(path);
+        if (moduleFrame == null) {
+            if (!loadingModules.add(path)) {
+                return fail(i, "Circular module import: " + path);
+            }
+            try {
+                Statement.Block program = moduleLoader.load(path);
+                StackFrame previous = currentFrame;
+                moduleFrame = new StackFrame();
+                currentFrame = moduleFrame;
+                sourceNames.addLast(path.toString());
+                try {
+                    for (Statement statement : program.statements()) {
+                        if (!(statement instanceof Statement.VarDecl
+                                || statement instanceof Statement.VarDeclGroup
+                                || statement instanceof Statement.Import)) {
+                            continue;
+                        }
+                        Object result = interpretStatement(statement);
+                        if (result instanceof Signal) {
+                            return fail(i, "Unexpected control flow in module: " + path);
+                        }
+                    }
+                } finally {
+                    sourceNames.removeLast();
+                    currentFrame = previous;
+                }
+                modules.put(path, moduleFrame);
+            } finally {
+                loadingModules.remove(path);
+            }
+        }
+        StackFrame current = currentFrame;
+        for (String name : i.names()) {
+            if (current.containsLocal(name)) {
+                return fail(i, "Variable already declared in this scope: " + name);
+            }
+            Cell imported = moduleFrame.getLocalVariable(name);
+            if (imported == null) {
+                return fail(i, "Module '" + path + "' does not define '" + name + "'");
+            }
+            current.setVariable(name, imported);
+        }
+        return null;
+    }
+
+    private Path resolveModulePath(String rawPath) {
+        Path path = Paths.get(rawPath);
+        if (!path.isAbsolute()) {
+            String currentSource = sourceNames.getLast();
+            if (!currentSource.equals(CallStackFrame.UNKNOWN_SOURCE)) {
+                Path currentFile = Paths.get(currentSource);
+                Path parent = currentFile.getParent();
+                if (parent != null) {
+                    path = parent.resolve(path);
+                }
+            }
+        }
+        return path.toAbsolutePath().normalize();
     }
 
     static String captureSourceName(String raw) {
@@ -688,6 +758,12 @@ public class Interpreter {
     }
 
     private <T> T fail(Node n, String message) {
-        throw new InterpretationException(n.span(), message, callStack, functionNames.getLast(), sourceName);
+        List<CallStackFrame> traceback = new ArrayList<>(callStack);
+        traceback.add(new CallStackFrame(
+                functionNames.getLast(),
+                n.span(),
+                sourceNames.getLast()
+        ));
+        throw new InterpretationException(n.span(), message, traceback, functionNames.getLast(), sourceNames.getLast());
     }
 }

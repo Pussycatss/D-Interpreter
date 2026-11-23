@@ -2,8 +2,8 @@ package pussycats.interpreter.cli;
 
 import pussycats.interpreter.ast.AstPrinter;
 import pussycats.interpreter.ast.Node;
-import pussycats.interpreter.SourceLocation;
 import pussycats.interpreter.error.ErrorReporter;
+import pussycats.interpreter.error.SourceManager;
 import pussycats.interpreter.lexer.Lexer;
 import pussycats.interpreter.lexer.LexerException;
 import pussycats.interpreter.lexer.Token;
@@ -80,77 +80,93 @@ public class CommandLineArgs implements Callable<Integer> {
     }
 
     private void run(String source, String sourceName) {
-        ErrorReporter reporter = new ErrorReporter(source, sourceName);
+        CompilationResult result = compile(source, sourceName);
 
         // ---- Lexer ----
-        List<Token> tokens = List.of();
-        try {
-            tokens = new Lexer(source, sourceName).scan();
-        } catch (LexerException e) {
-            reporter.report("RuntimeError", e.getMessage(), new SourceLocation(e.getLine(), e.getColumn()));
-            System.err.print(reporter.formatAll());
-            System.exit(1);
-        }
-
-        if (dumpTokens) {
+        if (dumpTokens && result.tokens() != null) {
             System.out.println("=== Tokens ===");
-            for (Token token : tokens) {
-                System.out.println(token);
-            }
+            result.tokens().forEach(System.out::println);
             System.out.println();
         }
 
         // ---- Parser ----
-        Parser parser = new Parser(tokens, source, sourceName);
-        Node ast = parser.parse();
-
-        if (parser.hasErrors() || ast == null) {
-            System.err.print(parser.formatErrors());
-            System.exit(1);
-            return;
-        }
-
-        if (dumpAst) {
+        if (dumpAst && result.ast() != null) {
             System.out.println("=== AST ===");
-            System.out.println(new AstPrinter().print(ast));
+            System.out.println(new AstPrinter().print(result.ast()));
+            System.out.println();
         }
 
         // ---- Analyzer ----
-        Analyzer analyzer = new Analyzer(reporter);
-        analyzer.analyze(ast);
-
-        if (analyzer.hasErrors()) {
-            System.err.print(analyzer.formatErrors());
+        if (result.error() != null) {
+            System.err.print(result.error());
             System.exit(1);
             return;
         }
 
         // ---- Optimizer ----
-        Optimizer optimizer = new Optimizer();
-        Node optimizedAst = optimizer.runFullOptimization(ast);
-
-        if (optimizedAst == null) {
-            System.err.println("Optimizer failed to optimize AST");
-            System.exit(1);
-            return;
-        }
-
-        if (optimizerMode) {
+        if (optimizerMode && result.optimizedAst() != null) {
             System.out.println("=== Optimized AST ===");
-            System.out.println(new AstPrinter().print(optimizedAst));
+            System.out.println(new AstPrinter().print(result.optimizedAst()));
+            System.out.println();
         }
 
         // ---- Interpreter ----
-        System.out.println("=== Execution ===");
+        if (dumpTokens || dumpAst || optimizerMode) {
+            System.out.println("=== Execution ===");
+        }
 
-        Interpreter interpreter = new Interpreter(sourceName);
+        SourceManager sourceManager = new SourceManager();
+        sourceManager.register(sourceName, source);
+        Interpreter interpreter = new Interpreter(sourceName, new CliModuleLoader(sourceManager));
 
         try {
-            interpreter.interpret(optimizedAst);
+            interpreter.interpret(result.optimizedAst());
         } catch (InterpretationException e) {
+            ErrorReporter reporter = new ErrorReporter(source, sourceName, sourceManager);
             reporter.report(e);
             System.err.print(reporter.formatAll());
             System.exit(1);
         }
+    }
+
+    private CompilationResult compile(String source, String sourceName) {
+        ErrorReporter reporter = new ErrorReporter(source, sourceName);
+
+        // ---- Lexer ----
+        List<Token> tokens;
+        try {
+            tokens = new Lexer(source, sourceName).scan();
+        } catch (LexerException e) {
+            return new CompilationResult(null, null, null, e.getMessage());
+        }
+
+        // ---- Parser ----
+        Parser parser = new Parser(tokens, source, sourceName);
+        Node ast = parser.parse();
+        if (parser.hasErrors() || ast == null) {
+            return new CompilationResult(tokens, null, null, parser.formatErrors());
+        }
+
+        // ---- Analyzer ----
+        Analyzer analyzer = new Analyzer(reporter);
+        analyzer.analyze(ast);
+        if (analyzer.hasErrors()) {
+            return new CompilationResult(tokens, ast, null, analyzer.formatErrors());
+        }
+
+        // ---- Optimizer ----
+        Node optimizedAst = new Optimizer().runFullOptimization(ast);
+        if (optimizedAst == null) {
+            return new CompilationResult(tokens, ast, null, "Optimizer failed to optimize AST");
+        }
+        return new CompilationResult(tokens, ast, optimizedAst, null);
+    }
+
+    private record CompilationResult(
+            List<Token> tokens,
+            Node ast,
+            Node optimizedAst,
+            String error
+    ) {
     }
 }

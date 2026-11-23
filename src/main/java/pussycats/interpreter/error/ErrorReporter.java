@@ -15,10 +15,16 @@ public final class ErrorReporter {
     private final List<DiagnosticError> errors = new ArrayList<>();
     private final String source;
     private final String filename;
+    private final SourceManager sourceManager;
 
     public ErrorReporter(String source, String filename) {
+        this(source, filename, null);
+    }
+
+    public ErrorReporter(String source, String filename, SourceManager sourceManager) {
         this.source = source;
         this.filename = filename;
+        this.sourceManager = sourceManager;
     }
 
     public void report(String errorType, String message, SourceLocation loc) {
@@ -41,8 +47,19 @@ public final class ErrorReporter {
         if (tooManyErrors()) {
             return;
         }
-        errors.add(new DiagnosticError(message, suggestion, source, filename, line, column, length, errorType,
-                null, "<module>"));
+        errors.add(new DiagnosticError(
+                message,
+                suggestion,
+                source,
+                filename,
+                line,
+                column,
+                length,
+                errorType,
+                null,
+                "<module>",
+                sourceManager
+        ));
     }
 
     public void report(InterpretationException exception) {
@@ -60,7 +77,8 @@ public final class ErrorReporter {
                 span.length(),
                 "RuntimeError",
                 exception.getCallStack(),
-                exception.getFunctionName()
+                exception.getFunctionName(),
+                sourceManager
         ));
     }
 

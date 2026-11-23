@@ -37,4 +37,8 @@ public class StackFrame {
     public StackFrame getParent() {
         return parent;
     }
+
+    public Cell getLocalVariable(String name) {
+        return variables.get(name);
+    }
 }

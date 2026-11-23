@@ -96,6 +96,11 @@ public final class Parser {
         skipSeparators();
         while (!isAtEnd() && !check(TokenType.END) && !check(TokenType.ELSE)) {
             try {
+                if (check(TokenType.IMPORT)) {
+                    throw panic(peek(),
+                            "Imports are only allowed at the top level",
+                            "move this import declaration outside the current block");
+                }
                 statements.add(parseStatement());
                 if (!isAtEnd() && !check(TokenType.END) && !check(TokenType.ELSE)) {
                     requireStatementSeparator(TokenType.END, TokenType.ELSE);
@@ -109,6 +114,7 @@ public final class Parser {
     }
 
     private Statement parseStatement() {
+        if (match(TokenType.IMPORT)) return parseImport();
         if (match(TokenType.VAR))    return parseVarDecl();
         if (match(TokenType.PRINT))  return parsePrint();
         if (match(TokenType.IF))     return parseIf();
@@ -151,6 +157,19 @@ public final class Parser {
                  EQUAL, NOT_EQUAL, AND, OR, XOR, IS -> true;
             default -> false;
         };
+    }
+
+    private Statement parseImport() {
+        Token open = previous();
+        List<String> names = new ArrayList<>();
+        do {
+            Token name = consume(TokenType.IDENTIFIER, "Expected an import name after 'import'");
+            names.add(name.lexeme());
+        } while (match(TokenType.COMMA));
+        consume(TokenType.FROM, "Expected 'from' after imported names");
+        Token path = consume(TokenType.STRING, "Expected a module path after 'from'");
+        return new Statement.Import(names, (String) path.literal(),
+                span(new SourceLocation(open.line(), open.column()), path));
     }
 
     /** {@code var a := 1, b, c := 3}: one declaration, or a {@code VarDeclGroup} if there are several. */
@@ -412,7 +431,9 @@ public final class Parser {
                 List<Expression> args = new ArrayList<>();
                 if (!check(TokenType.RPAREN)) {
                     do {
+                        skipOptionalNewlines();
                         args.add(parseExpression());
+                        skipOptionalNewlines();
                     } while (match(TokenType.COMMA));
                 }
                 Token close = closeDelimiter(TokenType.RPAREN, open, ")", "argument list");
@@ -502,6 +523,7 @@ public final class Parser {
         List<Expression> elems = new ArrayList<>();
         if (!check(TokenType.RBRACKET)) {
             do {
+                skipOptionalNewlines();
                 elems.add(parseExpression());
                 skipOptionalNewlines();
             } while (match(TokenType.COMMA));
@@ -516,19 +538,20 @@ public final class Parser {
         SourceLocation loc = new SourceLocation(open.line(), open.column());
         if (!check(TokenType.RBRACE)) {
             do {
+                skipOptionalNewlines();
                 if (check(TokenType.IDENTIFIER) && peekAt(1).type() == TokenType.ASSIGN) {
                     Token nameTok = advance();
                     advance();
                     Expression value = parseExpression();
                     entries.add(new Expression.TupleEntry(nameTok.lexeme(), value,
                             new SourceSpan(new SourceLocation(nameTok.line(), nameTok.column()), value.span().end())));
-                    skipOptionalNewlines();
                 } else if (check(TokenType.IDENTIFIER) && peekAt(1).type() == TokenType.EQUAL) {
                     throw panic(peekAt(1), "Expected ':=' after tuple element name", null);
                 } else {
                     Expression value = parseExpression();
                     entries.add(new Expression.TupleEntry(null, value, value.span()));
                 }
+                skipOptionalNewlines();
             } while (match(TokenType.COMMA));
         }
         Token close = closeDelimiter(TokenType.RBRACE, open, "}", "tuple literal");
@@ -543,6 +566,7 @@ public final class Parser {
             Token open = previous();
             if (!check(TokenType.RPAREN)) {
                 do {
+                    skipOptionalNewlines();
                     Token paramTok = consume(TokenType.IDENTIFIER, "Expected parameter name");
                     params.add(new Expression.Parameter(paramTok.lexeme(),
                             span(new SourceLocation(paramTok.line(), paramTok.column()), paramTok)));
@@ -765,6 +789,7 @@ public final class Parser {
                 return;
             }
             switch (peek().type()) {
+                case IMPORT:
                 case VAR:
                 case IF:
                 case WHILE:

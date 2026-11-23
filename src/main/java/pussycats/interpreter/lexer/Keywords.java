@@ -29,6 +29,10 @@ public final class Keywords {
         KEYWORDS.put("print", TokenType.PRINT);
         KEYWORDS.put("func", TokenType.FUNC);
 
+        // imports
+        KEYWORDS.put("import", TokenType.IMPORT);
+        KEYWORDS.put("from", TokenType.FROM);
+
         // literals
         KEYWORDS.put("true", TokenType.TRUE);
         KEYWORDS.put("false", TokenType.FALSE);

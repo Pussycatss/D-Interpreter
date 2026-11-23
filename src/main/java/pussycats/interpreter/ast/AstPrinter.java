@@ -180,6 +180,16 @@ public class AstPrinter {
                     print(d, sb, depth + 1);
                 }
             }
+            case Statement.Import i -> {
+                sb.append("Import(");
+                for (int j = 0; j < i.names().size(); j++) {
+                    if (j > 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(i.names().get(j));
+                }
+                sb.append(" from \"").append(i.path()).append("\")\n");
+            }
         }
     }
 

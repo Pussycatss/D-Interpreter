@@ -47,7 +47,7 @@ The type of the variable is not fixed during declaration. This means that a vari
 The language defines a common set of common statements: except of the declarations, which is also have a status of statements, there are assignment, conditional statement, two kinds of repeat statements and also function return statement and the print statement.
 
 ```
-Statement : Declaration | Assignment | If | IfShort | Loop | Exit | Return | Print
+Statement : Declaration | Import | Assignment | If | IfShort | Loop | Exit | Return | Print
 Assignment : Reference ":=" Expression
 If : "if" Expression "then" Body [ "else" Body ] "end"
 IfShort : "if" Expression "=>" Body
@@ -242,3 +242,60 @@ Both operands must be Boolean. The result of operations is always boolean. Other
 ## Unary negation: not
 
 The operand must be Boolean. The result of the operator is boolean. Other types of the operand are not allowed.
+
+## Modules and imports
+
+The language supports importing variables and functions from other source files (modules).
+
+An import declaration specifies the names to import and the path to the module containing them.
+
+```text
+Import : "import" IDENT { "," IDENT } "from" STRING
+```
+
+For example:
+
+```text
+import scale from "math.d"
+import add, multiply from "math_utils.d"
+```
+
+An import declaration makes the specified names available in the current scope. Names that are not explicitly imported remain accessible only within their defining module.
+
+Import declarations are allowed only at the top level of a program. They cannot appear inside functions, loops, conditional statements, or other nested blocks.
+
+### Module initialization
+
+When a module is imported for the first time, its module-level variable declarations and other import declarations are processed. This initializes the module's variables and makes its functions available.
+
+Function definitions are represented by variable declarations containing function literals. A function retains access to the scope in which it was defined, including variables declared in its module.
+
+Executable statements at the module level, such as `print`, conditional statements, and loops, are not executed during import and discarded.
+
+A module is initialized only once. Subsequent imports of the same module reuse existing module scope.
+
+### Import example
+
+Consider the following module:
+
+```text
+// math.d
+
+var multiplier := 10
+
+var scale := func(n) => n * multiplier
+
+print "This statement is not executed during import"
+```
+
+Another program can import and use the `scale` function:
+
+```text
+import scale from "math.d"
+
+print scale(5) // 50
+```
+
+Although `multiplier` is not explicitly imported, the `scale` function can access it because the scope is retained.
+
+The `multiplier` variable itself is not available directly in the importing scope.

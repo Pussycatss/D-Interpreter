@@ -5,39 +5,53 @@ import pussycats.interpreter.runtime.CallStackFrame;
 import java.nio.file.Paths;
 import java.util.List;
 
-public record DiagnosticError(String message, String suggestion, String source, String filename,
-                              int line, int column, int length, String errorType, List<CallStackFrame> callStack,
-                              String functionName) {
+public record DiagnosticError(
+        String message,
+        String suggestion,
+        String source,
+        String filename,
+        int line,
+        int column,
+        int length,
+        String errorType,
+        List<CallStackFrame> callStack,
+        String functionName,
+        SourceManager sourceManager
+) {
     public DiagnosticError {
         callStack = callStack == null ? List.of() : List.copyOf(callStack);
     }
 
     public String format() {
         StringBuilder sb = new StringBuilder("Traceback (most recent call last):\n");
-        for (CallStackFrame frame : callStack) {
-            var start = frame.span().start();
-            int frameLine = start.line();
+        if (callStack.isEmpty()) {
             sb.append("  File \"")
-                    .append(toTracebackPath(frame.sourceName()))
+                    .append(toTracebackPath(filename))
                     .append("\", line ")
-                    .append(frameLine)
-                    .append(", in ")
-                    .append(frame.functionName())
+                    .append(line)
+                    .append(", in ").append(functionName)
                     .append('\n');
-            appendSourceLine(
-                    sb,
-                    frameLine,
-                    start.column(),
-                    frame.span().length()
-            );
+            appendSourceLine(sb, source, line, column, length);
+        } else {
+            for (CallStackFrame frame : callStack) {
+                var start = frame.span().start();
+                int frameLine = start.line();
+                sb.append("  File \"")
+                        .append(toTracebackPath(frame.sourceName()))
+                        .append("\", line ")
+                        .append(frameLine)
+                        .append(", in ")
+                        .append(frame.functionName())
+                        .append('\n');
+                appendSourceLine(
+                        sb,
+                        sourceOf(frame.sourceName()),
+                        frameLine,
+                        start.column(),
+                        frame.span().length()
+                );
+            }
         }
-        sb.append("  File \"")
-                .append(toTracebackPath(filename))
-                .append("\", line ")
-                .append(line)
-                .append(", in ").append(functionName)
-                .append('\n');
-        appendSourceLine(sb, line, column, length);
         sb.append(errorType).append(": ").append(message);
         if (suggestion != null && !suggestion.isBlank()) {
             sb.append('\n').append("  hint: ").append(suggestion);
@@ -61,15 +75,27 @@ public record DiagnosticError(String message, String suggestion, String source, 
         }
     }
 
-    private void appendSourceLine(StringBuilder sb, int line, int column, int length) {
-        String srcLine = lineOf(line);
+    private void appendSourceLine(StringBuilder sb, String source, int line, int column, int length) {
+        String srcLine = lineOf(source, line);
         sb.append("    ").append(expandTabs(srcLine)).append('\n');
         int displayColumn = displayColumn(srcLine, column);
         sb.append("    ").repeat(" ", displayColumn);
-        sb.repeat("^", length).append('\n');
+        sb.repeat("^", Math.max(1, length)).append('\n');
     }
 
-    private String lineOf(int line) {
+    private String sourceOf(String sourceName) {
+        if (sourceName == null || sourceName.equals(filename)) {
+            return source;
+        }
+        if (sourceManager == null) {
+            return "";
+        }
+
+        String registeredSource = sourceManager.get(sourceName);
+        return registeredSource != null ? registeredSource : "";
+    }
+
+    private String lineOf(String source, int line) {
         if (line < 1) {
             return "";
         }
@@ -84,7 +110,9 @@ public record DiagnosticError(String message, String suggestion, String source, 
             currentLine++;
         }
         int end = source.indexOf('\n', from);
-        return end < 0 ? source.substring(from) : source.substring(from, end);
+        return end < 0
+                ? source.substring(from)
+                : source.substring(from, end);
     }
 
     private static String expandTabs(String s) {
