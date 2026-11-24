@@ -96,14 +96,14 @@ class OptimizerTest {
     @DisplayName("Real addition: 2.5 + 3.5 → 6.0")
     void realAdditionFolding() {
         var e = assertInstanceOf(Expression.RealLit.class, optimizedExpr("2.5 + 3.5"));
-        assertEquals(6.0, e.value(), 1e-9);
+        assertEquals(6.0, e.value().doubleValue(), 1e-9);
     }
 
     @Test
     @DisplayName("Mixed int/real addition: 2 + 3.5 → 5.5")
     void mixedIntRealAdditionFolding() {
         var e = assertInstanceOf(Expression.RealLit.class, optimizedExpr("2 + 3.5"));
-        assertEquals(5.5, e.value(), 1e-9);
+        assertEquals(5.5, e.value().doubleValue(), 1e-9);
     }
 
     /* ============ constant folding - comparisons ============ */
@@ -172,7 +172,7 @@ class OptimizerTest {
     @DisplayName("Unary minus on real: -3.5 → -3.5")
     void unaryMinusRealFolding() {
         var e = assertInstanceOf(Expression.RealLit.class, optimizedExpr("-3.5"));
-        assertEquals(-3.5, e.value(), 1e-9);
+        assertEquals(-3.5, e.value().doubleValue(), 1e-9);
     }
 
     @Test
@@ -370,13 +370,6 @@ class OptimizerTest {
         var block = optimize("x := 5; print 1");
         assertEquals(1, block.statements().size());
         assertInstanceOf(Statement.PrintStatement.class, block.statements().getFirst());
-    }
-
-    @Test
-    @DisplayName("Pure expression statement is removed")
-    void pureExpressionStatementRemoved() {
-        // Expression statements don't exist in D, so this test is not applicable
-        // Skip this test
     }
 
     /* ============ empty loop removal ============ */

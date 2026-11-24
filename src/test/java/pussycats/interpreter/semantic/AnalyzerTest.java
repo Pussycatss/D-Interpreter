@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import pussycats.interpreter.ast.Node;
+import pussycats.interpreter.error.ErrorReporter;
 import pussycats.interpreter.lexer.Lexer;
 import pussycats.interpreter.lexer.Token;
 import pussycats.interpreter.parser.Parser;
@@ -24,7 +25,8 @@ class AnalyzerTest {
             throw new AssertionError(
                     "parse failed for: <" + src + ">\n" + p.formatErrors());
         }
-        Analyzer analyzer = new Analyzer(src, "<test>");
+        ErrorReporter reporter = new ErrorReporter(src, "<test>");
+        Analyzer analyzer = new Analyzer(reporter);
         analyzer.analyze(ast);
         return analyzer;
     }

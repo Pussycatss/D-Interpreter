@@ -2,6 +2,7 @@ package pussycats.interpreter.lexer;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
 
@@ -70,7 +71,7 @@ class LexerTest {
     @Test void realLiteral() {
         List<Token> ts = Lexer.scan("3.14");
         assertEquals(TokenType.REAL, ts.getFirst().type());
-        assertEquals(3.14, (Double) ts.getFirst().literal(), 1e-9);
+        assertEquals(new BigDecimal("3.14"), ts.getFirst().literal());
     }
 
     @Test void rangeIsTwoIntegersNotAReal() {

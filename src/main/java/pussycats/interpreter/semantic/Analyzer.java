@@ -2,7 +2,7 @@ package pussycats.interpreter.semantic;
 
 import pussycats.interpreter.ast.Expression;
 import pussycats.interpreter.ast.Node;
-import pussycats.interpreter.ast.SourceLocation;
+import pussycats.interpreter.SourceLocation;
 import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.error.ErrorReporter;
 
@@ -21,8 +21,8 @@ public class Analyzer {
         final Map<String, Set<String>> tupleFields = new HashMap<>();
     }
 
-    public Analyzer(String source, String filename) {
-        this.reporter = new ErrorReporter(source, filename);
+    public Analyzer(ErrorReporter reporter) {
+        this.reporter = reporter;
         scopes.push(new Scope());
     }
 
@@ -39,14 +39,20 @@ public class Analyzer {
             return;
         }
         switch (node) {
+            case Statement.Import i -> checkImport(i);
             case Statement.Block b -> {
                 scopes.push(new Scope());
                 b.statements().forEach(this::analyze);
                 scopes.pop();
             }
             case Statement.VarDecl v -> {
-                analyze(v.init());
-                checkVariableDeclaration(v);
+                if (v.init() instanceof Expression.FuncLit) {
+                    checkVariableDeclaration(v);
+                    analyze(v.init());
+                } else {
+                    analyze(v.init());
+                    checkVariableDeclaration(v);
+                }
             }
             case Statement.VarDeclGroup group -> group.decls().forEach(this::analyze);
             case Statement.ExitStatement e -> checkExitStatement(e);
@@ -111,7 +117,6 @@ public class Analyzer {
                 analyze(a.target());
                 analyze(a.value());
             }
-            case Statement.ExpressionStatement es -> analyze(es.expression());
             case Statement.PrintStatement p -> p.values().forEach(this::analyze);
             case Expression.Binary b -> {
                 analyze(b.left());
@@ -166,6 +171,10 @@ public class Analyzer {
         return scopes.getFirst();
     }
 
+    public void declareGlobal(String name) {
+        scopes.getLast().names.add(name);
+    }
+
     private Scope findScope(String name) {
         for (Scope scope : scopes) {
             if (scope.names.contains(name)) {
@@ -188,11 +197,22 @@ public class Analyzer {
     // Semantic Checks
     // ==========================================
 
+    private void checkImport(Statement.Import i) {
+        Scope scope = currentScope();
+        for (String name : i.names()) {
+            if (!scope.names.add(name)) {
+                SourceLocation loc = i.span().start();
+                reporter.report("DeclarationError", "Duplicate declaration",
+                        "Name '" + name + "' is already defined in this scope", loc, name.length());
+            }
+        }
+    }
+
     private void checkVariableDeclaration(Statement.VarDecl v) {
         Scope scope = currentScope();
         if (scope.names.contains(v.name())) {
             SourceLocation loc = v.loc() != null ? v.loc() : SourceLocation.UNKNOWN;
-            reporter.report("Declaration error", "Duplicate declaration", "Variable '" + v.name() +
+            reporter.report("DeclarationError", "Duplicate declaration", "Variable '" + v.name() +
                             "' is already defined in this scope", loc, v.name().length());
             return;
         }
@@ -247,7 +267,7 @@ public class Analyzer {
         Set<String> seenParams = new HashSet<>();
         for (Expression.Parameter param : f.params()) {
             if (!seenParams.add(param.name())) {
-                SourceLocation loc = param.loc();
+                SourceLocation loc = param.span().start();
                 reporter.report("DeclarationError", "Duplicate function parameter", "'" + param.name() +
                                 "' is defined multiple times", loc, param.name().length());
             }
@@ -261,7 +281,7 @@ public class Analyzer {
         Set<String> seenKeys = new HashSet<>();
         for (Expression.TupleEntry entry : t.entries()) {
             if (entry.name() != null && !seenKeys.add(entry.name())) {
-                SourceLocation loc = entry.loc();
+                SourceLocation loc = entry.span().start();
                 reporter.report("DeclarationError", "Duplicate tuple key", "'" + entry.name() +
                         "' is defined multiple times", loc, entry.name().length());
             }

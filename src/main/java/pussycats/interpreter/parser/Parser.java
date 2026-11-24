@@ -1,11 +1,15 @@
 package pussycats.interpreter.parser;
 
+import pussycats.interpreter.SourceLocation;
+import pussycats.interpreter.SourceSpan;
 import pussycats.interpreter.ast.*;
+import pussycats.interpreter.error.DiagnosticError;
 import pussycats.interpreter.error.ErrorReporter;
 import pussycats.interpreter.lexer.Token;
 import pussycats.interpreter.lexer.TokenType;
 import pussycats.interpreter.lexer.Keywords;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +51,10 @@ public final class Parser {
         return reporter.formatAll();
     }
 
+    public List<DiagnosticError> getErrors() {
+        return reporter.getErrors();
+    }
+
     /**
      * Parses the whole program.
      *
@@ -77,7 +85,15 @@ public final class Parser {
             }
             skipSeparators();
         }
-        return new Statement.Block(statements, new SourceLocation(1, 1));
+        SourceLocation start = statements.isEmpty()
+                ? new SourceLocation(1, 1)
+                : statements.getFirst().span().start();
+
+        SourceLocation end = statements.isEmpty()
+                ? start
+                : statements.getLast().span().end();
+
+        return new Statement.Block(statements, new SourceSpan(start, end));
     }
 
     /** Parses statements inside a construct, up to (not including) {@code end} or {@code else}. */
@@ -85,16 +101,26 @@ public final class Parser {
         List<Statement> statements = new ArrayList<>();
         skipSeparators();
         while (!isAtEnd() && !check(TokenType.END) && !check(TokenType.ELSE)) {
-            statements.add(parseStatement());
-            if (!isAtEnd() && !check(TokenType.END) && !check(TokenType.ELSE)) {
-                requireStatementSeparator(TokenType.END, TokenType.ELSE);
-                skipSeparators();
+            try {
+                if (check(TokenType.IMPORT)) {
+                    throw panic(peek(),
+                            "Imports are only allowed at the top level",
+                            "move this import declaration outside the current block");
+                }
+                statements.add(parseStatement());
+                if (!isAtEnd() && !check(TokenType.END) && !check(TokenType.ELSE)) {
+                    requireStatementSeparator(TokenType.END, TokenType.ELSE);
+                }
+            } catch (ParsePanic ignored) {
+                synchronize();
             }
+            skipSeparators();
         }
         return statements;
     }
 
     private Statement parseStatement() {
+        if (match(TokenType.IMPORT)) return parseImport();
         if (match(TokenType.VAR))    return parseVarDecl();
         if (match(TokenType.PRINT))  return parsePrint();
         if (match(TokenType.IF))     return parseIf();
@@ -139,6 +165,19 @@ public final class Parser {
         };
     }
 
+    private Statement parseImport() {
+        Token open = previous();
+        List<String> names = new ArrayList<>();
+        do {
+            Token name = consume(TokenType.IDENTIFIER, "Expected an import name after 'import'");
+            names.add(name.lexeme());
+        } while (match(TokenType.COMMA));
+        consume(TokenType.FROM, "Expected 'from' after imported names");
+        Token path = consume(TokenType.STRING, "Expected a module path after 'from'");
+        return new Statement.Import(names, (String) path.literal(),
+                span(new SourceLocation(open.line(), open.column()), path));
+    }
+
     /** {@code var a := 1, b, c := 3}: one declaration, or a {@code VarDeclGroup} if there are several. */
     private Statement parseVarDecl() {
         Token open = previous();
@@ -152,9 +191,15 @@ public final class Parser {
             } else if (check(TokenType.EQUAL)) {
                 throw panic(peek(), "Expected ':=' after variable name", null);
             }
-            decls.add(new Statement.VarDecl(name.lexeme(), init, loc));
+            SourceLocation start = new SourceLocation(name.line(), name.column());
+            SourceLocation end = init == null
+                    ? new SourceLocation(name.line(), name.column() + name.lexeme().length())
+                    : init.span().end();
+            decls.add(new Statement.VarDecl(name.lexeme(), init, new SourceSpan(start, end)));
         } while (match(TokenType.COMMA));
-        return decls.size() == 1 ? decls.getFirst() : new Statement.VarDeclGroup(decls, loc);
+        return decls.size() == 1
+                ? decls.getFirst()
+                : new Statement.VarDeclGroup(decls, new SourceSpan(loc, decls.getLast().span().end()));
     }
 
     private Statement parsePrint() {
@@ -162,7 +207,8 @@ public final class Parser {
         List<Expression> values = new ArrayList<>();
         do values.add(parseExpression());
         while (match(TokenType.COMMA));
-        return new Statement.PrintStatement(values, new SourceLocation(open.line(), open.column()));
+        return new Statement.PrintStatement(values,
+                new SourceSpan(new SourceLocation(open.line(), open.column()), values.getLast().span().end()));
     }
 
     /** Parses an expression; if it is followed by {@code :=}, it becomes an assignment. */
@@ -176,7 +222,8 @@ public final class Parser {
                               "loop, for, exit, return, or an assignment using ':='");
         }
         Expression value = parseExpression();
-        return new Statement.Assign(expr, value, new SourceLocation(open.line(), open.column()));
+        return new Statement.Assign(expr, value,
+                new SourceSpan(new SourceLocation(open.line(), open.column()), value.span().end()));
     }
 
     /** Supports both forms: {@code if c => stmt} and {@code if c then ... [else ...] end}. */
@@ -186,18 +233,26 @@ public final class Parser {
         SourceLocation loc = new SourceLocation(open.line(), open.column());
         if (match(TokenType.ARROW)) {
             Statement s = parseStatement();
-            return new Statement.IfStatement(cond, new Statement.Block(List.of(s), loc), null, loc);
+            return new Statement.IfStatement(cond, new Statement.Block(List.of(s), new SourceSpan(loc, s.span().end())),
+                    null, new SourceSpan(loc, s.span().end()));
         }
 
         consume(TokenType.THEN, "Expected 'then' or '=>' after condition of 'if'");
-        Statement then = new Statement.Block(parseBody(), loc);
+        List<Statement> body = parseBody();
+        Statement then = new Statement.Block(body, new SourceSpan(loc, bodyEnd(body, loc)));
         Statement otherwise = null;
         if (match(TokenType.ELSE)) {
             Token elseToken = previous();
-            otherwise = new Statement.Block(parseBody(), new SourceLocation(elseToken.line(), elseToken.column()));
+            List<Statement> elseBody = parseBody();
+            SourceLocation elseStart =
+                    new SourceLocation(elseToken.line(), elseToken.column());
+            otherwise = new Statement.Block(
+                    elseBody,
+                    new SourceSpan(elseStart, bodyEnd(elseBody, elseStart))
+            );
         }
-        consumeEnd("if", open);
-        return new Statement.IfStatement(cond, then, otherwise, loc);
+        Token endToken = consumeEnd("if", open);
+        return new Statement.IfStatement(cond, then, otherwise, span(loc, endToken));
     }
 
     private Statement parseWhile() {
@@ -205,15 +260,16 @@ public final class Parser {
         Expression cond = parseExpression();
         consume(TokenType.LOOP, "Expected 'loop' after condition of 'while'");
         Statement.Block body = parseBodyBlock(open);
-        consumeEnd("while", open);
-        return new Statement.WhileStatement(cond, body, new SourceLocation(open.line(), open.column()));
+        Token endToken = consumeEnd("while", open);
+        return new Statement.WhileStatement(cond, body,
+                span(new SourceLocation(open.line(), open.column()), endToken));
     }
 
     private Statement parseLoop() {
         Token open = previous();
         Statement.Block body = parseBodyBlock(open);
-        consumeEnd("loop", open);
-        return new Statement.LoopStatement(body, new SourceLocation(open.line(), open.column()));
+        Token endToken = consumeEnd("loop", open);
+        return new Statement.LoopStatement(body, span(new SourceLocation(open.line(), open.column()), endToken));
     }
 
     /**
@@ -231,8 +287,8 @@ public final class Parser {
         if (check(TokenType.LOOP)) {
             advance();
             Statement.Block body = parseBodyBlock(open);
-            consumeEnd("for", open);
-            return new Statement.LoopStatement(body, loc);
+            Token endToken = consumeEnd("for", open);
+            return new Statement.LoopStatement(body, span(loc, endToken));
         }
 
         String var = null;
@@ -247,27 +303,31 @@ public final class Parser {
             Expression to = parseExpression();
             consume(TokenType.LOOP, "Expected 'loop' in 'for'");
             Statement.Block body = parseBodyBlock(open);
-            consumeEnd("for", open);
-            return new Statement.ForRangeStatement(var, first, to, body, loc);
+            Token endToken = consumeEnd("for", open);
+            return new Statement.ForRangeStatement(var, first, to, body, span(loc, endToken));
         }
 
         consume(TokenType.LOOP, "Expected 'loop' in 'for'");
         Statement.Block body = parseBodyBlock(open);
-        consumeEnd("for", open);
-        return new Statement.ForInStatement(var, first, body, loc);
+        Token endToken = consumeEnd("for", open);
+        return new Statement.ForInStatement(var, first, body, span(loc, endToken));
     }
 
     /** {@code exit} statement. */
     private Statement parseExit() {
         Token open = previous();
-        return new Statement.ExitStatement(new SourceLocation(open.line(), open.column()));
+        return new Statement.ExitStatement(span(new SourceLocation(open.line(), open.column()), open));
     }
 
     /** {@code return} may have no value if the statement ends right after it. */
     private Statement parseReturn() {
         Token open = previous();
         Expression value = isAtStatementBoundary() ? null : parseExpression();
-        return new Statement.ReturnStatement(value, new SourceLocation(open.line(), open.column()));
+        SourceLocation start = new SourceLocation(open.line(), open.column());
+        SourceLocation end = value == null
+                ? span(start, open).end()
+                : value.span().end();
+        return new Statement.ReturnStatement(value, new SourceSpan(start, end));
     }
 
     // ============================================================
@@ -276,50 +336,76 @@ public final class Parser {
     // ============================================================
 
     private Expression parseExpression() {
+        Expression left = parseXor();
+        TokenType or = TokenType.OR;
+        while (match(or)) {
+            Expression right = parseXor();
+            left = new Expression.Binary(left, or, right, new SourceSpan(left.span().start(), right.span().end()));
+        }
+        return left;
+    }
+
+    private Expression parseXor() {
+        Expression left = parseAnd();
+        TokenType xor = TokenType.XOR;
+        while (match(xor)) {
+            Expression right = parseAnd();
+            left = new Expression.Binary(left, xor, right, new SourceSpan(left.span().start(), right.span().end()));
+        }
+        return left;
+    }
+
+    private Expression parseAnd() {
         Expression left = parseRelation();
-        while (match(TokenType.OR, TokenType.AND, TokenType.XOR)) {
-            Token open = previous();
-            TokenType op = previous().type();
-            Expression right = parseRelation();
-            left = new Expression.Binary(left, op, right, new SourceLocation(open.line(), open.column()));
+        TokenType and = TokenType.AND;
+        while (match(and)) {
+            Expression right = parseXor();
+            left = new Expression.Binary(left, and, right, new SourceSpan(left.span().start(), right.span().end()));
         }
         return left;
     }
 
     /** Comparison operators are not chained: {@code a < b < c} is not allowed. */
     private Expression parseRelation() {
-        Expression left = parseFactor();
+        Expression left = parseIsExpr();
         if (match(TokenType.LESS, TokenType.LESS_EQUAL,
                 TokenType.GREATER, TokenType.GREATER_EQUAL,
                 TokenType.EQUAL, TokenType.NOT_EQUAL)) {
-            Token open = previous();
             TokenType op = previous().type();
-            Expression right = parseFactor();
-            return new Expression.Binary(left, op, right, new SourceLocation(open.line(), open.column()));
+            Expression right = parseIsExpr();
+            return new Expression.Binary(left, op, right, new SourceSpan(left.span().start(), right.span().end()));
         }
         return left;
     }
 
+    private Expression parseIsExpr() {
+        Expression expr = parseTerm();
+        if (match(TokenType.IS)) {
+            ParsedTypeIndicator parsed = parseTypeIndicator();
+            return new Expression.IsCheck(expr, parsed.type(),
+                    new SourceSpan(expr.span().start(), parsed.span().end()));
+        }
+        return expr;
+    }
+
     /** Addition and subtraction (left-associative). */
-    private Expression parseFactor() {
-        Expression left = parseTerm();
+    private Expression parseTerm() {
+        Expression left = parseFactor();
         while (match(TokenType.PLUS, TokenType.MINUS)) {
-            Token open = previous();
             TokenType op = previous().type();
-            Expression right = parseTerm();
-            left = new Expression.Binary(left, op, right, new SourceLocation(open.line(), open.column()));
+            Expression right = parseFactor();
+            left = new Expression.Binary(left, op, right, new SourceSpan(left.span().start(), right.span().end()));
         }
         return left;
     }
 
     /** Multiplication and division (left-associative). */
-    private Expression parseTerm() {
+    private Expression parseFactor() {
         Expression left = parseUnary();
         while (match(TokenType.ASTERISK, TokenType.SLASH)) {
-            Token open = previous();
             TokenType op = previous().type();
             Expression right = parseUnary();
-            left = new Expression.Binary(left, op, right, new SourceLocation(open.line(), open.column()));
+            left = new Expression.Binary(left, op, right, new SourceSpan(left.span().start(), right.span().end()));
         }
         return left;
     }
@@ -330,14 +416,10 @@ public final class Parser {
             Token open = previous();
             TokenType op = previous().type();
             Expression operand = parseUnary();
-            return new Expression.Unary(op, operand, new SourceLocation(open.line(), open.column()));
+            return new Expression.Unary(op, operand,
+                    new SourceSpan(new SourceLocation(open.line(), open.column()), operand.span().end()));
         }
-        Expression expr = parsePrimary();
-        if (match(TokenType.IS)) {
-            Token open = previous();
-            return new Expression.IsCheck(expr, parseTypeIndicator(), new SourceLocation(open.line(), open.column()));
-        }
-        return expr;
+        return parsePrimary();
     }
 
     /** An atom followed by any number of postfix operations: {@code [i]}, {@code (args)}, {@code .name}, {@code .1}. */
@@ -347,26 +429,38 @@ public final class Parser {
             if (match(TokenType.LBRACKET)) {
                 Token open = previous();
                 Expression index = parseExpression();
-                closeDelimiter(TokenType.RBRACKET, open, "]", "index expression");
-                expr = new Expression.Index(expr, index, new SourceLocation(open.line(), open.column()));
+                Token close = closeDelimiter(TokenType.RBRACKET, open, "]", "index expression");
+                expr = new Expression.Index(expr, index, new SourceSpan(expr.span().start(),
+                        span(new SourceLocation(open.line(), open.column()), close).end()));
             } else if (match(TokenType.LPAREN)) {
                 Token open = previous();
                 List<Expression> args = new ArrayList<>();
                 if (!check(TokenType.RPAREN)) {
                     do {
+                        skipOptionalNewlines();
                         args.add(parseExpression());
+                        skipOptionalNewlines();
                     } while (match(TokenType.COMMA));
                 }
-                closeDelimiter(TokenType.RPAREN, open, ")", "argument list");
-                expr = new Expression.Call(expr, args, new SourceLocation(open.line(), open.column()));
+                Token close = closeDelimiter(TokenType.RPAREN, open, ")", "argument list");
+                expr = new Expression.Call(expr, args, new SourceSpan(expr.span().start(), span(expr.loc(), close).end()));
             } else if (match(TokenType.DOT)) {
                 Token open = previous();
                 SourceLocation loc = new SourceLocation(open.line(), open.column());
                 if (match(TokenType.IDENTIFIER)) {
-                    expr = new Expression.Field(expr, previous().lexeme(), loc);
+                    Token prev = previous();
+                    expr = new Expression.Field(expr, prev.lexeme(),
+                            new SourceSpan(expr.span().start(), span(loc, prev).end()));
                 } else if (match(TokenType.INTEGER)) {
-                    int n = new BigInteger(previous().lexeme()).intValueExact();
-                    expr = new Expression.FieldIndex(expr, n, loc);
+                    Token prev = previous();
+                    BigInteger big = new BigInteger(prev.lexeme());
+                    if (big.bitLength() > 31) {
+                        throw panic(prev, "Field index is too large",
+                                "a tuple field index must fit in a 32-bit signed integer");
+                    }
+                    int n = big.intValue();
+                    expr = new Expression.FieldIndex(expr, n,
+                            new SourceSpan(expr.span().start(), span(loc, prev).end()));
                 } else {
                     throw error(peek(), "Expected a name or index after '.'");
                 }
@@ -381,33 +475,34 @@ public final class Parser {
         if (match(TokenType.INTEGER)) {
             Token open = previous();
             return new Expression.IntLit(new BigInteger(previous().lexeme()),
-                    new SourceLocation(open.line(), open.column()));
+                    span(new SourceLocation(open.line(), open.column()), open));
         }
         if (match(TokenType.REAL)) {
             Token open = previous();
-            return new Expression.RealLit(Double.parseDouble(previous().lexeme()),
-                    new SourceLocation(open.line(), open.column()));
+            return new Expression.RealLit(new BigDecimal(previous().lexeme()),
+                    span(new SourceLocation(open.line(), open.column()), open));
         }
         if (match(TokenType.STRING)) {
             Token open = previous();
             return new Expression.StringLit((String) previous().literal(),
-                    new SourceLocation(open.line(), open.column()));
+                    span(new SourceLocation(open.line(), open.column()), open));
         }
         if (match(TokenType.TRUE)) {
             Token open = previous();
-            return new Expression.BoolLit(true, new SourceLocation(open.line(), open.column()));
+            return new Expression.BoolLit(true, span(new SourceLocation(open.line(), open.column()), open));
         }
         if (match(TokenType.FALSE)) {
             Token open = previous();
-            return new Expression.BoolLit(false, new SourceLocation(open.line(), open.column()));
+            return new Expression.BoolLit(false, span(new SourceLocation(open.line(), open.column()), open));
         }
         if (match(TokenType.NONE)) {
             Token open = previous();
-            return new Expression.NoneLit(new SourceLocation(open.line(), open.column()));
+            return new Expression.NoneLit(span(new SourceLocation(open.line(), open.column()), open));
         }
         if (match(TokenType.IDENTIFIER)) {
             Token open = previous();
-            return new Expression.Ident(previous().lexeme(), new SourceLocation(open.line(), open.column()));
+            return new Expression.Ident(previous().lexeme(),
+                    span(new SourceLocation(open.line(), open.column()), open));
         }
         if (match(TokenType.LPAREN)) {
             Token open = previous();
@@ -434,11 +529,13 @@ public final class Parser {
         List<Expression> elems = new ArrayList<>();
         if (!check(TokenType.RBRACKET)) {
             do {
+                skipOptionalNewlines();
                 elems.add(parseExpression());
+                skipOptionalNewlines();
             } while (match(TokenType.COMMA));
         }
-        closeDelimiter(TokenType.RBRACKET, open, "]", "array literal");
-        return new Expression.ArrayLit(elems, new SourceLocation(open.line(), open.column()));
+        Token close = closeDelimiter(TokenType.RBRACKET, open, "]", "array literal");
+        return new Expression.ArrayLit(elems, span(new SourceLocation(open.line(), open.column()), close));
     }
 
     /** Tuple elements may be named ({@code x := 1}) or unnamed ({@code 1}). */
@@ -447,20 +544,24 @@ public final class Parser {
         SourceLocation loc = new SourceLocation(open.line(), open.column());
         if (!check(TokenType.RBRACE)) {
             do {
+                skipOptionalNewlines();
                 if (check(TokenType.IDENTIFIER) && peekAt(1).type() == TokenType.ASSIGN) {
                     Token nameTok = advance();
                     advance();
-                    entries.add(new Expression.TupleEntry(nameTok.lexeme(), parseExpression(),
-                            new SourceLocation(nameTok.line(), nameTok.column())));
+                    Expression value = parseExpression();
+                    entries.add(new Expression.TupleEntry(nameTok.lexeme(), value,
+                            new SourceSpan(new SourceLocation(nameTok.line(), nameTok.column()), value.span().end())));
                 } else if (check(TokenType.IDENTIFIER) && peekAt(1).type() == TokenType.EQUAL) {
                     throw panic(peekAt(1), "Expected ':=' after tuple element name", null);
                 } else {
-                    entries.add(new Expression.TupleEntry(null, parseExpression(), loc));
+                    Expression value = parseExpression();
+                    entries.add(new Expression.TupleEntry(null, value, value.span()));
                 }
+                skipOptionalNewlines();
             } while (match(TokenType.COMMA));
         }
-        closeDelimiter(TokenType.RBRACE, open, "}", "tuple literal");
-        return new Expression.TupleLit(entries, loc);
+        Token close = closeDelimiter(TokenType.RBRACE, open, "}", "tuple literal");
+        return new Expression.TupleLit(entries, span(loc, close));
     }
 
     /** {@code func(params) => expr} or {@code func(params) is ... end}; the parameter list is optional. */
@@ -471,9 +572,11 @@ public final class Parser {
             Token open = previous();
             if (!check(TokenType.RPAREN)) {
                 do {
+                    skipOptionalNewlines();
                     Token paramTok = consume(TokenType.IDENTIFIER, "Expected parameter name");
                     params.add(new Expression.Parameter(paramTok.lexeme(),
-                            new SourceLocation(paramTok.line(), paramTok.column())));
+                            span(new SourceLocation(paramTok.line(), paramTok.column()), paramTok)));
+                    skipOptionalNewlines();
                 } while (match(TokenType.COMMA));
             }
             closeDelimiter(TokenType.RPAREN, open, ")", "parameter list");
@@ -481,12 +584,13 @@ public final class Parser {
         SourceLocation loc = new SourceLocation(funcTok.line(), funcTok.column());
         if (match(TokenType.ARROW)) {
             Expression body = parseExpression();
-            return new Expression.FuncLit(params, body, false, loc);
+            return new Expression.FuncLit(params, body, false, new SourceSpan(loc, body.span().end()));
         }
         if (match(TokenType.IS)) {
-            Statement.Block body = new Statement.Block(parseBody(), loc);
-            consumeEnd("func", funcTok);
-            return new Expression.FuncLit(params, body, true, loc);
+            List<Statement> bodyList = parseBody();
+            Statement.Block body = new Statement.Block(bodyList, new SourceSpan(loc, bodyEnd(bodyList, loc)));
+            Token endToken = consumeEnd("func", funcTok);
+            return new Expression.FuncLit(params, body, true, span(loc, endToken));
         }
         throw panic(peek(),
                 "Expected '=>' or 'is' in function literal",
@@ -495,32 +599,47 @@ public final class Parser {
     }
 
     /** Parses the type after {@code is}: {@code int, real, bool, string, none, func, [], {}}. */
-    private TypeIndicator parseTypeIndicator() {
+    private ParsedTypeIndicator parseTypeIndicator() {
         if (match(TokenType.INT_TYPE)) {
-            return TypeIndicator.INT;
+            Token token = previous();
+            return new ParsedTypeIndicator(TypeIndicator.INT, span(token));
         }
         if (match(TokenType.REAL_TYPE)) {
-            return TypeIndicator.REAL;
+            Token token = previous();
+            return new ParsedTypeIndicator(TypeIndicator.REAL, span(token));
         }
         if (match(TokenType.BOOL_TYPE)) {
-            return TypeIndicator.BOOL;
+            Token token = previous();
+            return new ParsedTypeIndicator(TypeIndicator.BOOL, span(token));
         }
         if (match(TokenType.STRING_TYPE)) {
-            return TypeIndicator.STRING;
+            Token token = previous();
+            return new ParsedTypeIndicator(TypeIndicator.STRING, span(token));
         }
         if (match(TokenType.NONE)) {
-            return TypeIndicator.NONE;
+            Token token = previous();
+            return new ParsedTypeIndicator(TypeIndicator.NONE, span(token));
         }
         if (match(TokenType.FUNC)) {
-            return TypeIndicator.FUNC;
+            Token token = previous();
+            return new ParsedTypeIndicator(TypeIndicator.FUNC, span(token));
         }
         if (match(TokenType.LBRACKET)) {
-            consume(TokenType.RBRACKET, "Expected ']' after '[' in type indicator");
-            return TypeIndicator.VECTOR;
+            Token open = previous();
+            Token close = consume(TokenType.RBRACKET, "Expected ']' after '[' in type indicator");
+            return new ParsedTypeIndicator(
+                    TypeIndicator.VECTOR,
+                    span(new SourceLocation(open.line(), open.column()), close)
+            );
         }
         if (match(TokenType.LBRACE)) {
-            consume(TokenType.RBRACE, "Expected '}' after '{' in type indicator");
-            return TypeIndicator.TUPLE;
+            Token open = previous();
+            Token close = consume(TokenType.RBRACE,
+                    "Expected '}' after '{' in type indicator");
+            return new ParsedTypeIndicator(
+                    TypeIndicator.TUPLE,
+                    span(new SourceLocation(open.line(), open.column()), close)
+            );
         }
         throw panic(peek(),
                 "Expected a type indicator (int, real, bool, string, none, [], {}, func)",
@@ -528,8 +647,10 @@ public final class Parser {
     }
 
     /** Consumes the closing token, or reports an error that mentions where the delimiter was opened. */
-    private void closeDelimiter(TokenType expected, Token openTok, String closer, String what) {
-        if (match(expected)) return;
+    private Token closeDelimiter(TokenType expected, Token openTok, String closer, String what) {
+        if (match(expected)) {
+            return previous();
+        }
         Token got = peek();
         throw panic(got,
                 "unclosed '" + openTok.lexeme() + "' in " + what,
@@ -545,10 +666,14 @@ public final class Parser {
         return close == null ? null : "did you mean '" + close + "'?";
     }
 
-        private Statement.Block parseBodyBlock(Token open) {
-            SourceLocation loc = new SourceLocation(open.line(), open.column());
-            return new Statement.Block(parseBody(), loc);
-        }
+    private Statement.Block parseBodyBlock(Token open) {
+        SourceLocation start = new SourceLocation(open.line(), open.column());
+        List<Statement> body = parseBody();
+        SourceLocation end = body.isEmpty()
+                ? start
+                : body.getLast().span().end();
+        return new Statement.Block(body, new SourceSpan(start, end));
+    }
 
     /**
      * Checks that two statements are separated by a newline or {@code ;}.
@@ -576,35 +701,15 @@ public final class Parser {
      * Consumes {@code end}, or reports an error that points to the line where
      * the construct was opened.
      */
-    private void consumeEnd(String constructName, Token openTok) {
-        if (match(TokenType.END)) return;
+    private Token consumeEnd(String constructName, Token openTok) {
+        if (match(TokenType.END)) {
+            return previous();
+        }
         Token got = peek();
         throw panic(got,
                 "unclosed '" + constructName + "'",
                 "the '" + constructName + "' at " + pos(openTok)
                         + " needs a matching 'end'");
-    }
-
-    private void skipToCommaOrClose(TokenType closer) {
-        int depth = 0;
-        while (!isAtEnd()) {
-            TokenType t = peek().type();
-            if (depth == 0 && (t == TokenType.COMMA || t == closer)) {
-                return;
-            }
-            if (t == TokenType.LPAREN || t == TokenType.LBRACKET || t == TokenType.LBRACE) {
-                depth++;
-            } else if (t == TokenType.RPAREN || t == TokenType.RBRACKET || t == TokenType.RBRACE) {
-                if (depth == 0) {
-                    return; // an unmatched closer
-                }
-                depth--;
-            } else if (t == TokenType.NEWLINE || t == TokenType.SEMICOLON) {
-                // while hunting for a list terminator before next statement
-                return;
-            }
-            advance();
-        }
     }
 
     private void skipOptionalNewlines() {
@@ -690,6 +795,7 @@ public final class Parser {
                 return;
             }
             switch (peek().type()) {
+                case IMPORT:
                 case VAR:
                 case IF:
                 case WHILE:
@@ -735,12 +841,19 @@ public final class Parser {
         return new ParsePanic();
     }
 
-    private String describe(Token t) {
-        return switch (t.type()) {
-            case EOF -> "end of input";
-            case NEWLINE -> "end of line";
-            default -> "'" + t.lexeme() + "'";
-        };
+    private SourceSpan span(SourceLocation start, Token end) {
+        return new SourceSpan(
+                start,
+                new SourceLocation(end.line(), end.column() + end.lexeme().length())
+        );
+    }
+
+    private SourceSpan span(Token token) {
+        return span(new SourceLocation(token.line(), token.column()), token);
+    }
+
+    private SourceLocation bodyEnd(List<Statement> body, SourceLocation fallback) {
+        return body.isEmpty() ? fallback : body.getLast().span().end();
     }
 
     // ============================================================
@@ -821,4 +934,6 @@ public final class Parser {
         }
         return dp[n][m];
     }
+
+    private record ParsedTypeIndicator(TypeIndicator type, SourceSpan span) {}
 }

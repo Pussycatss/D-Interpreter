@@ -1,6 +1,9 @@
 package pussycats.interpreter.error;
 
-import pussycats.interpreter.ast.SourceLocation;
+import pussycats.interpreter.SourceLocation;
+import pussycats.interpreter.SourceSpan;
+import pussycats.interpreter.lexer.LexerException;
+import pussycats.interpreter.runtime.InterpretationException;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -11,12 +14,18 @@ public final class ErrorReporter {
     private static final int MAX_ERRORS = 200;
 
     private final List<DiagnosticError> errors = new ArrayList<>();
-    private final String source;
+    private final String sourceCode;
     private final String filename;
+    private final SourceManager sourceManager;
 
     public ErrorReporter(String source, String filename) {
-        this.source = source;
+        this(source, filename, null);
+    }
+
+    public ErrorReporter(String sourceCode, String filename, SourceManager sourceManager) {
+        this.sourceCode = sourceCode;
         this.filename = filename;
+        this.sourceManager = sourceManager;
     }
 
     public void report(String errorType, String message, SourceLocation loc) {
@@ -39,7 +48,56 @@ public final class ErrorReporter {
         if (tooManyErrors()) {
             return;
         }
-        errors.add(new DiagnosticError(message, suggestion, source, filename, line, column, length, errorType));
+        errors.add(new DiagnosticError(
+                message,
+                suggestion,
+                sourceCode,
+                filename,
+                line,
+                column,
+                length,
+                errorType,
+                null,
+                sourceManager
+        ));
+    }
+
+    public void report(LexerException exception) {
+        if (tooManyErrors()) {
+            return;
+        }
+        SourceSpan span = exception.getSpan();
+        errors.add(new DiagnosticError(
+                exception.getMessage(),
+                null,
+                sourceCode,
+                filename,
+                span.start().line(),
+                span.start().column(),
+                span.length(),
+                "SyntaxError",
+                null,
+                sourceManager
+        ));
+    }
+
+    public void report(InterpretationException exception) {
+        if (tooManyErrors()) {
+            return;
+        }
+        SourceSpan span = exception.getSpan();
+        errors.add(new DiagnosticError(
+                exception.getMessage(),
+                null,
+                sourceCode,
+                filename,
+                span.start().line(),
+                span.start().column(),
+                span.length(),
+                "RuntimeError",
+                exception.getCallStack(),
+                sourceManager
+        ));
     }
 
     public boolean hasErrors() {
@@ -58,7 +116,7 @@ public final class ErrorReporter {
     public String formatAll() {
         StringBuilder sb = new StringBuilder();
         for (DiagnosticError e : errors) {
-            sb.append(e.format()).append("\n\n");
+            sb.append(e.format()).append("\n");
         }
         return sb.toString();
     }

@@ -22,7 +22,7 @@ end
 
 // --- 5. Empty Loop Removal ---
 while false loop
-    print "This goes hard on mute"
+    print "This will never be printed"
 end
 
 // --- 6. Dead Code after Return ---

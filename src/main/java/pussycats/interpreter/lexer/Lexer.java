@@ -1,5 +1,6 @@
 package pussycats.interpreter.lexer;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +19,6 @@ import java.util.List;
  */
 public final class Lexer {
     private final String source;
-    private final String sourceName;
     private final List<Token> tokens = new ArrayList<>();
 
     private int start = 0;
@@ -26,14 +26,13 @@ public final class Lexer {
     private int line = 1;
     private int column = 1;
     private int startTokenColumn = 1;
-
-    public Lexer(String source, String sourceName) {
-        this.source = source;
-        this.sourceName = sourceName;
-    }
+    private boolean after_dot = false;
+    private int lastCodeEndColumn = 1;
+    private int lastCodeEndLine = 1;
+    private boolean hasCodeOnLine = false;
 
     public Lexer(String source) {
-        this(source, "<unknown>");
+        this.source = source;
     }
 
     public static List<Token> scan(String source) {
@@ -71,7 +70,10 @@ public final class Lexer {
             case '{' -> addToken(TokenType.LBRACE);
             case '}' -> addToken(TokenType.RBRACE);
             case ',' -> addToken(TokenType.COMMA);
-            case ';' -> addToken(TokenType.SEMICOLON);
+            case ';' -> {
+                addToken(TokenType.SEMICOLON);
+                after_dot = false;
+            }
 
             case '+' -> addToken(TokenType.PLUS);
             case '-' -> addToken(TokenType.MINUS);
@@ -92,6 +94,7 @@ public final class Lexer {
                     addToken(TokenType.RANGE);
                 } else {
                     addToken(TokenType.DOT);
+                    after_dot = true;
                 }
             }
 
@@ -133,6 +136,12 @@ public final class Lexer {
         while (isDigit(peek())) {
             advance();
         }
+        String text = source.substring(start, current);
+
+        if (after_dot) {
+            addToken(TokenType.INTEGER, new BigInteger(text));
+            return;
+        }
 
         boolean isReal = false;
         if (peek() == '.' && isDigit(peekNext())) {
@@ -141,9 +150,9 @@ public final class Lexer {
             while (isDigit(peek()));
         }
 
-        String text = source.substring(start, current);
+        text = source.substring(start, current);
         if (isReal) {
-            addToken(TokenType.REAL, Double.parseDouble(text));
+            addToken(TokenType.REAL, new BigDecimal(text));
         } else {
             addToken(TokenType.INTEGER, new BigInteger(text));
         }
@@ -206,10 +215,19 @@ public final class Lexer {
         }
     }
 
+    /**
+     * Emits the NEWLINE token at the position right after the last real token on
+     * the line, so trailing whitespace and //-comments are effectively skipped.
+     * If the line contained no code, the newline is placed at column 1.
+     */
     private void addLineBreak() {
+        int nlLine = hasCodeOnLine ? lastCodeEndLine : line;
+        int nlColumn = hasCodeOnLine ? lastCodeEndColumn : 1;
+        tokens.add(new Token(TokenType.NEWLINE, "\\n", null, nlLine, nlColumn));
         line++;
         column = 1;
-        tokens.add(new Token(TokenType.NEWLINE, "\\n", null, line - 1, startTokenColumn));
+        hasCodeOnLine = false;
+        after_dot = false;
     }
 
     private boolean isAtEOF() {
@@ -265,9 +283,12 @@ public final class Lexer {
     private void addToken(TokenType type, Object literal) {
         String lexeme = source.substring(start, current);
         tokens.add(new Token(type, lexeme, literal, line, startTokenColumn));
+        lastCodeEndColumn = column;
+        lastCodeEndLine = line;
+        hasCodeOnLine = true;
     }
 
     private LexerException error(String message) {
-        return new LexerException(message, source, sourceName, line, startTokenColumn);
+        return new LexerException(message, line, startTokenColumn);
     }
 }

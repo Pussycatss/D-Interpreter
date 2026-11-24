@@ -45,6 +45,10 @@ public enum TokenType {
     NOT,
     IS,
 
+    // Imports
+    IMPORT,
+    FROM,
+
     // Operators
     PLUS,
     MINUS,
