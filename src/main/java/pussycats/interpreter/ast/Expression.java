@@ -4,6 +4,7 @@ import pussycats.interpreter.SourceLocation;
 import pussycats.interpreter.SourceSpan;
 import pussycats.interpreter.lexer.TokenType;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
 
@@ -15,7 +16,7 @@ public sealed interface Expression extends Node {
 
     // --- Literals ---
     record IntLit(BigInteger value, SourceSpan span)                                            implements Expression {}
-    record RealLit(double value, SourceSpan span)                                               implements Expression {}
+    record RealLit(BigDecimal value, SourceSpan span)                                           implements Expression {}
     record StringLit(String value, SourceSpan span)                                             implements Expression {}
     record BoolLit(boolean value, SourceSpan span)                                              implements Expression {}
     record NoneLit(SourceSpan span)                                                             implements Expression {}

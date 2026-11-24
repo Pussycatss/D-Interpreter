@@ -86,7 +86,7 @@ class ParserTest {
 
     @Test void realLiteral() {
         var e = assertInstanceOf(Expression.RealLit.class, expr("3.14"));
-        assertEquals(3.14, e.value(), 1e-9);
+        assertEquals(3.14, e.value().doubleValue(), 1e-9);
     }
 
     @Test void stringLiteral() {

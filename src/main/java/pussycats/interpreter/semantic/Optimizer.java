@@ -6,7 +6,9 @@ import pussycats.interpreter.ast.Node;
 import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.lexer.TokenType;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.MathContext;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -112,12 +114,12 @@ public class Optimizer {
             }
         }
         // Remaining numeric combinations: Int/Real, Real/Int, Real/Real
-        Double l = asDouble(left);
-        Double r = asDouble(right);
-        if (l != null && r != null) {
-            return foldReal(op, l, r, span);
+        BigDecimal l = asBigDecimal(left);
+        BigDecimal r = asBigDecimal(right);
+        if (l == null || r == null) {
+            return null;
         }
-        return null;
+        return foldReal(op, l, r, span);
     }
 
     private Expression foldInt(TokenType op, BigInteger l, BigInteger r, SourceSpan span) {
@@ -137,18 +139,18 @@ public class Optimizer {
         };
     }
 
-    private Expression foldReal(TokenType op, double l, double r, SourceSpan span) {
+    private Expression foldReal(TokenType op, BigDecimal l, BigDecimal r, SourceSpan span) {
         return switch (op) {
-            case PLUS -> realOrNull(l + r, span);
-            case MINUS -> realOrNull(l - r, span);
-            case ASTERISK -> realOrNull(l * r, span);
-            case SLASH -> r == 0.0 ? null : realOrNull(l / r, span);
-            case LESS -> new Expression.BoolLit(l < r, span);
-            case LESS_EQUAL -> new Expression.BoolLit(l <= r, span);
-            case GREATER -> new Expression.BoolLit(l > r, span);
-            case GREATER_EQUAL -> new Expression.BoolLit(l >= r, span);
-            case EQUAL -> new Expression.BoolLit(l == r, span);
-            case NOT_EQUAL -> new Expression.BoolLit(l != r, span);
+            case PLUS -> realOrNull(l.add(r), span);
+            case MINUS -> realOrNull(l.subtract(r), span);
+            case ASTERISK -> realOrNull(l.multiply(r), span);
+            case SLASH -> r.signum() == 0 ? null : realOrNull(l.divide(r, MathContext.DECIMAL128), span);
+            case LESS -> new Expression.BoolLit(l.compareTo(r) < 0, span);
+            case LESS_EQUAL -> new Expression.BoolLit(l.compareTo(r) <= 0, span);
+            case GREATER -> new Expression.BoolLit(l.compareTo(r) > 0, span);
+            case GREATER_EQUAL -> new Expression.BoolLit(l.compareTo(r) >= 0, span);
+            case EQUAL -> new Expression.BoolLit(l.compareTo(r) == 0, span);
+            case NOT_EQUAL -> new Expression.BoolLit(l.compareTo(r) != 0, span);
             default -> null;
         };
     }
@@ -289,7 +291,7 @@ public class Optimizer {
                 return new Expression.IntLit(v.negate(), u.span());
             }
             if (operand instanceof Expression.RealLit(var v, var ignored)) {
-                return new Expression.RealLit(-v, u.span());
+                return new Expression.RealLit(v.negate(), u.span());
             }
             // -(-x) -> x
             if (operand instanceof Expression.Unary(var innerOp, var inner, var ignored) && innerOp == TokenType.MINUS) {
@@ -569,21 +571,24 @@ public class Optimizer {
         return ast;
     }
 
-    private static Double asDouble(Expression e) {
+    private static BigDecimal asBigDecimal(Expression e) {
         return switch (e) {
-            case Expression.IntLit(var v, var ignored) -> v.doubleValue();
+            case Expression.IntLit(var v, var ignored) -> new BigDecimal(v);
             case Expression.RealLit(var v, var ignored) -> v;
             default -> null;
         };
     }
 
     private static boolean isNonZeroNumber(Expression e) {
-        Double d = asDouble(e);
-        return d != null && d != 0.0;
+        return switch (e) {
+            case Expression.IntLit(var v, var ignored) -> v.signum() != 0;
+            case Expression.RealLit(var v, var ignored) -> v.signum() != 0;
+            default -> false;
+        };
     }
 
-    private static Expression realOrNull(double v, SourceSpan span) {
-        return Double.isFinite(v) ? new Expression.RealLit(v, span) : null;
+    private static Expression realOrNull(BigDecimal v, SourceSpan span) {
+        return new Expression.RealLit(v, span);
     }
 
     /** Integer division rounding down, as the language spec requires (BigInteger.divide truncates). */

@@ -2,6 +2,8 @@ package pussycats.interpreter.ast;
 
 import pussycats.interpreter.lexer.TokenType;
 
+import java.math.BigDecimal;
+
 /**
  * Prints an AST as an indented tree, one node per line.
  * <p>
@@ -275,11 +277,11 @@ public class AstPrinter {
     }
 
     /** Formats a real number so that whole values keep a decimal part ({@code 2.0}, not {@code 2}). */
-    private static String formatReal(double d) {
-        if (d == Math.floor(d) && !Double.isInfinite(d)) {
-            return d + ".0";
+    private static String formatReal(BigDecimal d) {
+        if (d.stripTrailingZeros().scale() <= 0) {
+            return d.toBigInteger() + ".0";
         }
-        return Double.toString(d);
+        return d.stripTrailingZeros().toPlainString();
     }
 
     /** Maps an operator token to the symbol used in the source code; unknown operators fall back to the token name. */

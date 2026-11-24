@@ -1,5 +1,6 @@
 package pussycats.interpreter.lexer;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
@@ -151,7 +152,7 @@ public final class Lexer {
 
         text = source.substring(start, current);
         if (isReal) {
-            addToken(TokenType.REAL, Double.parseDouble(text));
+            addToken(TokenType.REAL, new BigDecimal(text));
         } else {
             addToken(TokenType.INTEGER, new BigInteger(text));
         }

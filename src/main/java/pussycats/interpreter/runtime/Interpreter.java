@@ -6,7 +6,9 @@ import pussycats.interpreter.SourceLocation;
 import pussycats.interpreter.ast.Statement;
 import pussycats.interpreter.lexer.TokenType;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.MathContext;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -166,12 +168,12 @@ public class Interpreter {
         Object result = switch (u.op()) {
             case MINUS -> switch (operand) {
                 case BigInteger n -> n.negate();
-                case Double d -> -d;
+                case BigDecimal d -> d.negate();
                 case null, default -> fail(u, "Cannot negate this type");
             };
             case PLUS -> switch (operand) {
                 case BigInteger n -> n;
-                case Double d -> d;
+                case BigDecimal d -> d;
                 case null, default -> fail(u, "Cannot apply unary plus to this type");
             };
             case NOT -> switch (operand) {
@@ -184,7 +186,7 @@ public class Interpreter {
     }
 
     private Object interpretBinary(Expression.Binary b) {
-        Cell leftCell = evalOperand(b.left());
+        Cell leftCell = evaluate(b.left());
         Object left = leftCell.get();
 
         if (b.op() == TokenType.AND || b.op() == TokenType.OR) {
@@ -199,7 +201,7 @@ public class Interpreter {
             }
         }
 
-        Cell rightCell = evalOperand(b.right());
+        Cell rightCell = evaluate(b.right());
         Object right = rightCell.get();
 
         Object result = switch (b.op()) {
@@ -211,10 +213,6 @@ public class Interpreter {
             default -> fail(b, "Unknown binary operator");
         };
         return new ImmutableCell(result, b.loc());
-    }
-
-    private Cell evalOperand(Expression e) {
-        return evaluate(e);
     }
 
     private Object arithmetic(Expression.Binary b, Object left, Object right) {
@@ -252,12 +250,9 @@ public class Interpreter {
         if (!(left instanceof Number l) || !(right instanceof Number r)) {
             return fail(b, "Cannot apply " + op + " to these types");
         }
-        boolean divisionByZero = switch (right) {
-            case BigInteger n -> n.signum() == 0;
-            case Double d -> d == 0.0;
-            default -> false;
-        };
-        if (op == TokenType.SLASH && divisionByZero) {
+        if (op == TokenType.SLASH &&
+                (r instanceof BigInteger bi && bi.signum() == 0 ||
+                        r instanceof BigDecimal bd && bd.signum() == 0)) {
             return fail(b, "Division by zero");
         }
         if (l instanceof BigInteger x && r instanceof BigInteger y) {
@@ -265,25 +260,40 @@ public class Interpreter {
                 case PLUS -> x.add(y);
                 case MINUS -> x.subtract(y);
                 case ASTERISK -> x.multiply(y);
-                default -> x.divide(y);
+                case SLASH -> floorDiv(x, y);
+                default -> fail(b, "Unsupported arithmetic operator: " + op);
             };
         }
-        double x = l.doubleValue();
-        double y = r.doubleValue();
+        BigDecimal x;
+        if (l instanceof BigDecimal bd) {
+            x = bd;
+        } else {
+            assert l instanceof BigInteger;
+            x = new BigDecimal((BigInteger) l);
+        }
+        BigDecimal y;
+        if (r instanceof BigDecimal bd) {
+            y = bd;
+        } else {
+            assert r instanceof BigInteger;
+            y = new BigDecimal((BigInteger) r);
+        }
         return switch (op) {
-            case PLUS -> x + y;
-            case MINUS -> x - y;
-            case ASTERISK -> x * y;
-            default -> x / y;
+            case PLUS -> x.add(y);
+            case MINUS -> x.subtract(y);
+            case ASTERISK -> x.multiply(y);
+            case SLASH -> x.divide(y, MathContext.DECIMAL128);
+            default -> fail(b, "Unsupported arithmetic operator: " + op);
         };
     }
 
     private Object compare(Expression.Binary b, Object left, Object right) {
         int cmp;
         switch (left) {
-            case BigInteger l when right instanceof BigInteger r -> cmp = l.compareTo(r);
-            case Number l when right instanceof Number r -> cmp = Double.compare(l.doubleValue(), r.doubleValue());
-            case String l when right instanceof String r -> cmp = l.compareTo(r);
+            case Number l when right instanceof Number r ->
+                    cmp = new BigDecimal(l.toString()).compareTo(new BigDecimal(r.toString()));
+            case String l when right instanceof String r ->
+                    cmp = l.compareTo(r);
             case null, default -> {
                 return fail(b, "Cannot compare these types");
             }
@@ -300,11 +310,8 @@ public class Interpreter {
         if (left == null || right == null) {
             return fail(node, "Value 'none' cannot be used as an operand of equality");
         }
-        if (left instanceof BigInteger l && right instanceof BigInteger r) {
-            return l.equals(r);
-        }
         if (left instanceof Number l && right instanceof Number r) {
-            return l.doubleValue() == r.doubleValue();
+            return new BigDecimal(l.toString()).compareTo(new BigDecimal(r.toString())) == 0;
         }
         return fail(node, "Equality comparison is only supported for numbers");
     }
@@ -328,9 +335,9 @@ public class Interpreter {
             case NONE   -> target == null;
             case BOOL   -> target instanceof Boolean;
             case INT    -> target instanceof BigInteger;
-            case REAL   -> target instanceof Double;
+            case REAL   -> target instanceof BigDecimal;
             case STRING -> target instanceof String;
-            case VECTOR  -> target instanceof ArrayCell;
+            case VECTOR -> target instanceof ArrayCell;
             case TUPLE  -> target instanceof TupleCell;
             case FUNC   -> target instanceof FunctionCell;
         };
@@ -787,6 +794,12 @@ public class Interpreter {
 
     private void popContext() {
         executionContexts.removeLast();
+    }
+
+    private static BigInteger floorDiv(BigInteger l, BigInteger r) {
+        BigInteger[] qr = l.divideAndRemainder(r);
+        boolean inexactAndOppositeSigns = qr[1].signum() != 0 && qr[1].signum() != r.signum();
+        return inexactAndOppositeSigns ? qr[0].subtract(BigInteger.ONE) : qr[0];
     }
 
     private Cell evaluate(Expression expr) {

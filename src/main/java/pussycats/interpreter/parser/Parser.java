@@ -9,6 +9,7 @@ import pussycats.interpreter.lexer.Token;
 import pussycats.interpreter.lexer.TokenType;
 import pussycats.interpreter.lexer.Keywords;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
@@ -478,7 +479,7 @@ public final class Parser {
         }
         if (match(TokenType.REAL)) {
             Token open = previous();
-            return new Expression.RealLit(Double.parseDouble(previous().lexeme()),
+            return new Expression.RealLit(new BigDecimal(previous().lexeme()),
                     span(new SourceLocation(open.line(), open.column()), open));
         }
         if (match(TokenType.STRING)) {
