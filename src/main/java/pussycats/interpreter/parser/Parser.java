@@ -3,6 +3,7 @@ package pussycats.interpreter.parser;
 import pussycats.interpreter.SourceLocation;
 import pussycats.interpreter.SourceSpan;
 import pussycats.interpreter.ast.*;
+import pussycats.interpreter.error.DiagnosticError;
 import pussycats.interpreter.error.ErrorReporter;
 import pussycats.interpreter.lexer.Token;
 import pussycats.interpreter.lexer.TokenType;
@@ -47,6 +48,10 @@ public final class Parser {
     /** Returns all collected errors as one formatted string. */
     public String formatErrors() {
         return reporter.formatAll();
+    }
+
+    public List<DiagnosticError> getErrors() {
+        return reporter.getErrors();
     }
 
     /**

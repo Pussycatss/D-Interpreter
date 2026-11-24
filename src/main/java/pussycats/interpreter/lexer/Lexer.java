@@ -18,7 +18,6 @@ import java.util.List;
  */
 public final class Lexer {
     private final String source;
-    private final String sourceName;
     private final List<Token> tokens = new ArrayList<>();
 
     private int start = 0;
@@ -31,13 +30,8 @@ public final class Lexer {
     private int lastCodeEndLine = 1;
     private boolean hasCodeOnLine = false;
 
-    public Lexer(String source, String sourceName) {
-        this.source = source;
-        this.sourceName = sourceName;
-    }
-
     public Lexer(String source) {
-        this(source, "<unknown>");
+        this.source = source;
     }
 
     public static List<Token> scan(String source) {
@@ -294,6 +288,6 @@ public final class Lexer {
     }
 
     private LexerException error(String message) {
-        return new LexerException(message, source, sourceName, line, startTokenColumn);
+        return new LexerException(message, line, startTokenColumn);
     }
 }

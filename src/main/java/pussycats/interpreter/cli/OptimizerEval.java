@@ -14,7 +14,7 @@ public class OptimizerEval implements Evaluable {
     private final Optimizer optimizer = new Optimizer();
 
     public String eval(String line) {
-        List<Token> tokens = new Lexer(line, "<stdin>").scan();
+        List<Token> tokens = new Lexer(line).scan();
         Parser parser = new Parser(tokens, line, "<stdin>");
         Node ast = parser.parse();
 

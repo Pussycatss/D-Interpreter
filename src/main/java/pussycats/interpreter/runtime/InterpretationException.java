@@ -7,29 +7,16 @@ import java.util.List;
 
 public class InterpretationException extends InterpreterException {
     private final List<CallStackFrame> callStack;
-    private final String functionName;
     
     public InterpretationException(
             SourceSpan span,
             String message,
-            List<CallStackFrame> callStack,
-            String functionName,
-            String sourceName) {
-        super(message, null, sourceName, span);
+            List<CallStackFrame> callStack) {
+        super(message, span);
         this.callStack = List.copyOf(callStack);
-        this.functionName = functionName;
     }
 
     public List<CallStackFrame> getCallStack() {
         return callStack;
-    }
-
-    public String getFunctionName() {
-        return functionName;
-    }
-
-    @Override
-    protected String getErrorType() {
-        return "RuntimeError";
     }
 }

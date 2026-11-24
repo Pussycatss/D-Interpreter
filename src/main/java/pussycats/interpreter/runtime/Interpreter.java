@@ -15,33 +15,30 @@ import java.util.*;
 public class Interpreter {
     private final StackFrame globalFrame;
     private StackFrame currentFrame;
-    private final List<CallStackFrame> callStack;
-    private final Deque<String> functionNames;
-    private final Deque<String> sourceNames;
+    private final Deque<ExecutionContext> executionContexts;
     private final ModuleLoader moduleLoader;
     private final Map<Path, StackFrame> modules = new HashMap<>();
     private final Set<Path> loadingModules = new HashSet<>();
+    private static long executionSteps = 0;
 
     private static final int MAX_CALL_DEPTH = 256;
+    private static final long MAX_EXECUTION_STEPS = 10_000_000;
 
     public Interpreter(String filename, ModuleLoader moduleLoader) {
         this.globalFrame = new StackFrame();
         this.currentFrame = globalFrame;
-        this.callStack = new ArrayList<>();
-        this.functionNames = new ArrayDeque<>();
-        this.functionNames.addLast("<module>");
-        this.sourceNames = new ArrayDeque<>();
-        this.sourceNames.addLast(captureSourceName(filename));
+        this.executionContexts = new ArrayDeque<>();
+        this.executionContexts.addLast(new ExecutionContext("<module>", captureSourceName(filename), null));
         this.moduleLoader = Objects.requireNonNull(moduleLoader);
-    }
-
-    public Interpreter() {
-        this(null, null);
     }
 
     public Object interpret(Node node) {
         if (node == null) {
             return null;
+        }
+
+        if (++executionSteps > MAX_EXECUTION_STEPS) {
+            return fail(node, "Maximum execution steps exceeded: " + MAX_EXECUTION_STEPS);
         }
 
         return switch (node) {
@@ -126,7 +123,7 @@ public class Interpreter {
         if (params.size() != c.args().size()) {
             return fail(c, "Argument count mismatch");
         }
-        if (callStack.size() >= MAX_CALL_DEPTH) {
+        if (executionContexts.size() >= MAX_CALL_DEPTH) {
             return fail(c, "Maximum function call depth exceeded: " + MAX_CALL_DEPTH);
         }
 
@@ -137,9 +134,12 @@ public class Interpreter {
         }
         StackFrame previous = currentFrame;
         currentFrame = new StackFrame(closure);
-        callStack.add(new CallStackFrame(functionNames.getLast(), c.span(), sourceNames.getLast()));
-        functionNames.addLast(name);
-        sourceNames.addLast(sourceName);
+        CallStackFrame callSite = new CallStackFrame(
+                currentContext().functionName(),
+                c.span(),
+                currentContext().sourceName()
+        );
+        pushContext(name, sourceName, callSite);
         try {
             for (int i = 0; i < params.size(); i++) {
                 currentFrame.setVariable(params.get(i).name(), argCells.get(i));
@@ -151,9 +151,7 @@ public class Interpreter {
             Object raw = (result instanceof Cell cell) ? cell.get() : result;
             return new ImmutableCell(raw, c.loc());
         } finally {
-            sourceNames.removeLast();
-            functionNames.removeLast();
-            callStack.removeLast();
+            popContext();
             currentFrame = previous;
         }
     }
@@ -362,7 +360,7 @@ public class Interpreter {
 
     private Object interpretFuncLit(Expression.FuncLit f, String name) {
         StackFrame closure = currentFrame;
-        String definingSource = sourceNames.getLast();
+        String definingSource = currentContext().sourceName();
         return new ImmutableCell(new FunctionCell(name, f.params(), f.body(), closure, definingSource), f.loc());
     }
 
@@ -538,10 +536,10 @@ public class Interpreter {
         }
 
         if (cond) {
-            return interpretStatement(i.then());
+            return interpret(i.then());
         }
         if (i.otherwise() != null) {
-            return interpretStatement(i.otherwise());
+            return interpret(i.otherwise());
         }
         return null;
     }
@@ -654,17 +652,18 @@ public class Interpreter {
     }
 
     private Object interpretBlock(Statement.Block b) {
-        currentFrame = new StackFrame(currentFrame);
+        StackFrame previous = currentFrame;
+        currentFrame = new StackFrame(previous);
         try {
             for (Statement statement : b.statements()) {
-                Object result = interpretStatement(statement);
+                Object result = interpret(statement);
                 if (result instanceof Signal) {
                     return result;
                 }
             }
             return null;
         } finally {
-            currentFrame = currentFrame.getParent();
+            currentFrame = previous;
         }
     }
 
@@ -680,7 +679,7 @@ public class Interpreter {
                 StackFrame previous = currentFrame;
                 moduleFrame = new StackFrame();
                 currentFrame = moduleFrame;
-                sourceNames.addLast(path.toString());
+                pushContext("<module>", path.toString(), null);
                 try {
                     for (Statement statement : program.statements()) {
                         if (!(statement instanceof Statement.VarDecl
@@ -688,16 +687,31 @@ public class Interpreter {
                                 || statement instanceof Statement.Import)) {
                             continue;
                         }
-                        Object result = interpretStatement(statement);
+                        Object result = interpret(statement);
                         if (result instanceof Signal) {
                             return fail(i, "Unexpected control flow in module: " + path);
                         }
                     }
                 } finally {
-                    sourceNames.removeLast();
+                    popContext();
                     currentFrame = previous;
                 }
                 modules.put(path, moduleFrame);
+            } catch (ModuleLoadException e) {
+                throw e.wrap(new CallStackFrame(
+                        currentContext().functionName(),
+                        i.span(),
+                        currentContext().sourceName()));
+            } catch (InterpretationException e) {
+                List<CallStackFrame> traceback = new ArrayList<>(e.getCallStack().size() + 1);
+                traceback.add(new CallStackFrame(
+                        currentContext().functionName(),
+                        i.span(),
+                        currentContext().sourceName()));
+                traceback.addAll(e.getCallStack());
+                throw new InterpretationException(e.getSpan(), e.getMessage(), traceback);
+            } catch (RuntimeException e) {
+                fail(i, e.getMessage());
             } finally {
                 loadingModules.remove(path);
             }
@@ -719,7 +733,7 @@ public class Interpreter {
     private Path resolveModulePath(String rawPath) {
         Path path = Paths.get(rawPath);
         if (!path.isAbsolute()) {
-            String currentSource = sourceNames.getLast();
+            String currentSource = currentContext().sourceName();
             if (!currentSource.equals(CallStackFrame.UNKNOWN_SOURCE)) {
                 Path currentFile = Paths.get(currentSource);
                 Path parent = currentFile.getParent();
@@ -752,18 +766,49 @@ public class Interpreter {
         }
     }
 
+    private record ExecutionContext(
+            String functionName,
+            String sourceName,
+            CallStackFrame callSite
+    ) {}
+
+    private ExecutionContext currentContext() {
+        return executionContexts.getLast();
+    }
+
+    private void pushContext(String functionName, String sourceName, CallStackFrame callSite) {
+        executionContexts.addLast(
+                new ExecutionContext(functionName, sourceName, callSite)
+        );
+    }
+
+    private void popContext() {
+        executionContexts.removeLast();
+    }
+
     private Cell evaluate(Expression expr) {
-        Object result = interpretExpression(expr);
+        Object result = interpret(expr);
         return (Cell) result;
     }
 
     private <T> T fail(Node n, String message) {
-        List<CallStackFrame> traceback = new ArrayList<>(callStack);
+        List<CallStackFrame> traceback = new ArrayList<>();
+        Iterator<ExecutionContext> iterator = executionContexts.iterator();
+        if (iterator.hasNext()) {
+            iterator.next();
+        }
+        while (iterator.hasNext()) {
+            CallStackFrame callSite = iterator.next().callSite();
+            if (callSite != null) {
+                traceback.add(callSite);
+            }
+        }
+        ExecutionContext context = currentContext();
         traceback.add(new CallStackFrame(
-                functionNames.getLast(),
+                context.functionName(),
                 n.span(),
-                sourceNames.getLast()
+                context.sourceName()
         ));
-        throw new InterpretationException(n.span(), message, traceback, functionNames.getLast(), sourceNames.getLast());
+        throw new InterpretationException(n.span(), message, traceback);
     }
 }

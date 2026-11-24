@@ -13,17 +13,7 @@ import pussycats.interpreter.InterpreterException;
  * </ul>
  */
 public final class LexerException extends InterpreterException {
-
-    public LexerException(String message, String source, int line, int column) {
-        super(message, source, line, column);
-    }
-
-    public LexerException(String message, String source, String filename, int line, int column) {
-        super(message, source, filename, line, column);
-    }
-
-    @Override
-    protected String getErrorType() {
-        return "SyntaxError";
+    public LexerException(String message, int line, int column) {
+        super(message, line, column);
     }
 }

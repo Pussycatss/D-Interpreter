@@ -2,6 +2,7 @@ package pussycats.interpreter.cli;
 
 import pussycats.interpreter.ast.AstPrinter;
 import pussycats.interpreter.ast.Node;
+import pussycats.interpreter.error.DiagnosticError;
 import pussycats.interpreter.error.ErrorReporter;
 import pussycats.interpreter.error.SourceManager;
 import pussycats.interpreter.lexer.Lexer;
@@ -11,14 +12,17 @@ import pussycats.interpreter.parser.Parser;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
+import pussycats.interpreter.runtime.CallStackFrame;
 import pussycats.interpreter.runtime.Interpreter;
 import pussycats.interpreter.runtime.InterpretationException;
+import pussycats.interpreter.runtime.ModuleLoadException;
 import pussycats.interpreter.semantic.Optimizer;
 import pussycats.interpreter.semantic.Analyzer;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 
@@ -80,8 +84,11 @@ public class CommandLineArgs implements Callable<Integer> {
     }
 
     private void run(String source, String sourceName) {
-        CompilationResult result = compile(source, sourceName);
+        SourceManager sourceManager = new SourceManager();
+        sourceManager.register(sourceName, source);
+        ErrorReporter reporter = new ErrorReporter(source, sourceName, sourceManager);
 
+        CompilationResult result = compile(source, sourceName, reporter);
         // ---- Lexer ----
         if (dumpTokens && result.tokens() != null) {
             System.out.println("=== Tokens ===");
@@ -93,7 +100,6 @@ public class CommandLineArgs implements Callable<Integer> {
         if (dumpAst && result.ast() != null) {
             System.out.println("=== AST ===");
             System.out.println(new AstPrinter().print(result.ast()));
-            System.out.println();
         }
 
         // ---- Analyzer ----
@@ -107,7 +113,6 @@ public class CommandLineArgs implements Callable<Integer> {
         if (optimizerMode && result.optimizedAst() != null) {
             System.out.println("=== Optimized AST ===");
             System.out.println(new AstPrinter().print(result.optimizedAst()));
-            System.out.println();
         }
 
         // ---- Interpreter ----
@@ -115,29 +120,30 @@ public class CommandLineArgs implements Callable<Integer> {
             System.out.println("=== Execution ===");
         }
 
-        SourceManager sourceManager = new SourceManager();
-        sourceManager.register(sourceName, source);
         Interpreter interpreter = new Interpreter(sourceName, new CliModuleLoader(sourceManager));
 
         try {
             interpreter.interpret(result.optimizedAst());
+        } catch (ModuleLoadException e) {
+            printModuleError(e, sourceManager);
+            System.exit(1);
         } catch (InterpretationException e) {
-            ErrorReporter reporter = new ErrorReporter(source, sourceName, sourceManager);
             reporter.report(e);
             System.err.print(reporter.formatAll());
             System.exit(1);
         }
     }
 
-    private CompilationResult compile(String source, String sourceName) {
-        ErrorReporter reporter = new ErrorReporter(source, sourceName);
-
+    private CompilationResult compile(String source, String sourceName, ErrorReporter reporter) {
         // ---- Lexer ----
         List<Token> tokens;
         try {
-            tokens = new Lexer(source, sourceName).scan();
+            tokens = new Lexer(source).scan();
         } catch (LexerException e) {
-            return new CompilationResult(null, null, null, e.getMessage());
+            reporter.report(e);
+            System.err.print(reporter.formatAll());
+            System.exit(1);
+            return new CompilationResult(null, null, null, reporter.formatAll());
         }
 
         // ---- Parser ----
@@ -168,5 +174,24 @@ public class CommandLineArgs implements Callable<Integer> {
             Node optimizedAst,
             String error
     ) {
+    }
+
+    private static void printModuleError(ModuleLoadException e, SourceManager sourceManager) {
+        // Append the deepest failing location as the final frame.
+        List<CallStackFrame> chain = new ArrayList<>(e.getFrames());
+        chain.add(new CallStackFrame("<module>", e.getSpan(), e.getSourceName()));
+
+        DiagnosticError diag = new DiagnosticError(
+                e.getMessage(),
+                e.getSuggestion(),
+                sourceManager.get(e.getSourceName()),
+                e.getSourceName(),
+                e.getSpan().start().line(),
+                e.getSpan().start().column(),
+                e.getSpan().length(),
+                e.getErrorType(),
+                chain,
+                sourceManager);
+        System.err.print(diag.format());
     }
 }

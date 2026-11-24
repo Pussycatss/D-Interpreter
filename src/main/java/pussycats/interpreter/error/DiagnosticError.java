@@ -15,7 +15,6 @@ public record DiagnosticError(
         int length,
         String errorType,
         List<CallStackFrame> callStack,
-        String functionName,
         SourceManager sourceManager
 ) {
     public DiagnosticError {
@@ -23,40 +22,46 @@ public record DiagnosticError(
     }
 
     public String format() {
-        StringBuilder sb = new StringBuilder("Traceback (most recent call last):\n");
-        if (callStack.isEmpty()) {
-            sb.append("  File \"")
-                    .append(toTracebackPath(filename))
-                    .append("\", line ")
-                    .append(line)
-                    .append(", in ").append(functionName)
-                    .append('\n');
-            appendSourceLine(sb, source, line, column, length);
-        } else {
-            for (CallStackFrame frame : callStack) {
-                var start = frame.span().start();
-                int frameLine = start.line();
-                sb.append("  File \"")
-                        .append(toTracebackPath(frame.sourceName()))
-                        .append("\", line ")
-                        .append(frameLine)
-                        .append(", in ")
-                        .append(frame.functionName())
-                        .append('\n');
-                appendSourceLine(
-                        sb,
-                        sourceOf(frame.sourceName()),
-                        frameLine,
-                        start.column(),
-                        frame.span().length()
-                );
+        boolean isRuntime = "RuntimeError".equals(errorType) || !callStack.isEmpty();
+        StringBuilder sb = new StringBuilder();
+        sb.append("Traceback (most recent call last):\n");
+        if (isRuntime) {
+            if (callStack.isEmpty()) {
+                appendFrame(sb, filename, line, source, column, length, "<module>");
+            } else {
+                for (CallStackFrame frame : callStack) {
+                    var start = frame.span().start();
+                    appendFrame(
+                            sb,
+                            frame.sourceName(),
+                            start.line(),
+                            sourceOf(frame.sourceName()),
+                            start.column(),
+                            frame.span().length(),
+                            frame.functionName()
+                    );
+                }
             }
+        } else {
+            sb.append("  File \"").append(toTracebackPath(filename))
+                    .append("\", line ").append(line)
+                    .append(", column ").append(column).append('\n');
+            appendSourceLine(sb, source, line, column, length);
         }
+
         sb.append(errorType).append(": ").append(message);
         if (suggestion != null && !suggestion.isBlank()) {
             sb.append('\n').append("  hint: ").append(suggestion);
         }
         return sb.toString();
+    }
+
+    private void appendFrame(StringBuilder sb, String file, int lineNo,
+                             String src, int col, int len, String funcName) {
+        sb.append("  File \"").append(toTracebackPath(file))
+                .append("\", line ").append(lineNo)
+                .append(", in ").append(funcName).append('\n');
+        appendSourceLine(sb, src, lineNo, col, len);
     }
 
     private static String toTracebackPath(String name) {

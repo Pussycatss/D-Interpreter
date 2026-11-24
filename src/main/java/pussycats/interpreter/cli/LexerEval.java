@@ -8,7 +8,7 @@ import java.util.List;
 public class LexerEval implements Evaluable {
     public List<Token> eval(String line) {
         List<Token> tokens;
-        tokens = new Lexer(line, "<stdin>").scan();
+        tokens = new Lexer(line).scan();
 
         return tokens;
     }

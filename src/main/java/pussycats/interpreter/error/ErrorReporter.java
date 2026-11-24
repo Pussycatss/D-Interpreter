@@ -2,6 +2,7 @@ package pussycats.interpreter.error;
 
 import pussycats.interpreter.SourceLocation;
 import pussycats.interpreter.SourceSpan;
+import pussycats.interpreter.lexer.LexerException;
 import pussycats.interpreter.runtime.InterpretationException;
 
 import java.util.ArrayList;
@@ -13,7 +14,7 @@ public final class ErrorReporter {
     private static final int MAX_ERRORS = 200;
 
     private final List<DiagnosticError> errors = new ArrayList<>();
-    private final String source;
+    private final String sourceCode;
     private final String filename;
     private final SourceManager sourceManager;
 
@@ -21,8 +22,8 @@ public final class ErrorReporter {
         this(source, filename, null);
     }
 
-    public ErrorReporter(String source, String filename, SourceManager sourceManager) {
-        this.source = source;
+    public ErrorReporter(String sourceCode, String filename, SourceManager sourceManager) {
+        this.sourceCode = sourceCode;
         this.filename = filename;
         this.sourceManager = sourceManager;
     }
@@ -50,14 +51,32 @@ public final class ErrorReporter {
         errors.add(new DiagnosticError(
                 message,
                 suggestion,
-                source,
+                sourceCode,
                 filename,
                 line,
                 column,
                 length,
                 errorType,
                 null,
-                "<module>",
+                sourceManager
+        ));
+    }
+
+    public void report(LexerException exception) {
+        if (tooManyErrors()) {
+            return;
+        }
+        SourceSpan span = exception.getSpan();
+        errors.add(new DiagnosticError(
+                exception.getMessage(),
+                null,
+                sourceCode,
+                filename,
+                span.start().line(),
+                span.start().column(),
+                span.length(),
+                "SyntaxError",
+                null,
                 sourceManager
         ));
     }
@@ -70,14 +89,13 @@ public final class ErrorReporter {
         errors.add(new DiagnosticError(
                 exception.getMessage(),
                 null,
-                source,
+                sourceCode,
                 filename,
                 span.start().line(),
                 span.start().column(),
                 span.length(),
                 "RuntimeError",
                 exception.getCallStack(),
-                exception.getFunctionName(),
                 sourceManager
         ));
     }
@@ -98,7 +116,7 @@ public final class ErrorReporter {
     public String formatAll() {
         StringBuilder sb = new StringBuilder();
         for (DiagnosticError e : errors) {
-            sb.append(e.format()).append("\n\n");
+            sb.append(e.format()).append("\n");
         }
         return sb.toString();
     }

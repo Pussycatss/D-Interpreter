@@ -17,13 +17,13 @@ public class StackFrame {
     }
     
     public Cell getVariable(String name) {
-        Cell cell = variables.get(name);
-        if (cell != null) {
-            return cell;
+        for (StackFrame frame = this; frame != null; frame = frame.parent) {
+            Cell variable = frame.variables.get(name);
+            if (variable != null) {
+                return variable;
+            }
         }
-        return parent != null
-                ? parent.getVariable(name)
-                : null;
+        return null;
     }
 
     public boolean containsLocal(String name) {
@@ -32,10 +32,6 @@ public class StackFrame {
 
     public void setVariable(String name, Cell cell) {
         variables.put(name, cell);
-    }
-
-    public StackFrame getParent() {
-        return parent;
     }
 
     public Cell getLocalVariable(String name) {

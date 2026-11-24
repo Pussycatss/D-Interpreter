@@ -12,7 +12,7 @@ public class ParserEval implements Evaluable {
     private final AstPrinter astPrinter = new AstPrinter();
 
     public String eval(String line) {
-        List<Token> tokens = new Lexer(line, "<stdin>").scan();
+        List<Token> tokens = new Lexer(line).scan();
         Parser parser = new Parser(tokens, line, "<stdin>");
         Node ast = parser.parse();
 
