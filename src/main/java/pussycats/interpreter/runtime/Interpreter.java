@@ -39,6 +39,17 @@ public class Interpreter {
         return interpretNode(node);
     }
 
+    public Object interpretTopLevel(Statement.Block block) {
+        executionSteps = 0;
+        for (Statement statement : block.statements()) {
+            Object result = interpretNode(statement);
+            if (result instanceof Signal) {
+                return result;
+            }
+        }
+        return null;
+    }
+
     private Object interpretNode(Node node) {
         if (node == null) {
             return null;
