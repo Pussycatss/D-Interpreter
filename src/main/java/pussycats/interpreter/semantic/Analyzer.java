@@ -171,6 +171,10 @@ public class Analyzer {
         return scopes.getFirst();
     }
 
+    public void declareGlobal(String name) {
+        scopes.getLast().names.add(name);
+    }
+
     private Scope findScope(String name) {
         for (Scope scope : scopes) {
             if (scope.names.contains(name)) {
