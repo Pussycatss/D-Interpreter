@@ -45,6 +45,9 @@ public class CommandLineArgs implements Callable<Integer> {
     @Option(names = {"-o", "--optimizer"}, description = "Run REPL with optimizer (shows before/after AST)")
     private boolean optimizerMode = false;
 
+    @Option(names = {"-i", "--interpreter"}, description = "Run REPL that executes code")
+    private boolean interpreterMode = false;
+
     @Parameters(index = "0", description = "Script file to execute", arity = "0..1")
     private String file = null;
 
@@ -67,7 +70,8 @@ public class CommandLineArgs implements Callable<Integer> {
         }
 
         // No file, no -c: drop into the REPL.
-        new REPL(optimizerMode ? "optimizer" : "parser");
+        String replMode = interpreterMode ? "interpreter" : optimizerMode ? "optimizer" : "parser";
+        new REPL(replMode);
         return 0;
     }
 
