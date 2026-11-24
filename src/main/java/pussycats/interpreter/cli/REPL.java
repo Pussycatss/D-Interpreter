@@ -23,6 +23,7 @@ public class REPL {
             case "lexer" -> new LexerEval();
             case "parser" -> new ParserEval();
             case "optimizer" -> new OptimizerEval();
+            case "interpreter" -> new InterpreterEval();
             default -> throw new IllegalArgumentException("Unknown type: " + type);
         };
     }
@@ -30,7 +31,7 @@ public class REPL {
     private void setupSignalHandler() {
         oldHandler = Signal.handle(new Signal("INT"), _ -> {
             if (exitRequested) {
-                shouldExit = true;
+                System.exit(0);
             } else {
                 exitRequested = true;
             }
@@ -96,10 +97,16 @@ public class REPL {
 
         // First, check keyword depth by splitting input into words
         String[] words = input.split("\\s+");
-        for (String word : words) {
-            if (isBlockKeyword(word)) {
-                keywordDepth++;
-            } else if ("end".equals(word)) {
+        for (int i = 0; i < words.length; i++) {
+            String ident = leadingIdentifier(words[i]);
+            if (ident == null) {
+                continue;
+            }
+            if (isBlockKeyword(ident)) {
+                if (opensBlock(ident, words, i)) {
+                    keywordDepth++;
+                }
+            } else if ("end".equals(ident)) {
                 keywordDepth--;
             }
         }
@@ -138,12 +145,49 @@ public class REPL {
         return parenCount != 0 || bracketCount != 0 || braceCount != 0 || inString || keywordDepth != 0;
     }
 
-    private boolean isBlockKeyword(String word) {
-        // Strip trailing punctuation like () := etc.
-        String clean = word.replaceAll("[():=,]+$", "");
-        return switch (clean) {
+    private String leadingIdentifier(String word) {
+        int i = 0;
+        while (i < word.length() && (Character.isLetterOrDigit(word.charAt(i)) || word.charAt(i) == '_')) {
+            i++;
+        }
+        return i == 0 ? null : word.substring(0, i);
+    }
+
+    private boolean isBlockKeyword(String ident) {
+        return switch (ident) {
             case "if", "while", "loop", "for", "func" -> true;
             default -> false;
+        };
+    }
+
+    private boolean opensBlock(String ident, String[] words, int index) {
+        return switch (ident) {
+            case "func" -> {
+                if (words[index].contains("=>")) {
+                    yield false;
+                }
+                for (int j = index + 1; j < words.length; j++) {
+                    if (words[j].contains("=>")) {
+                        yield false;
+                    }
+                    if ("is".equals(leadingIdentifier(words[j]))) {
+                        yield true;
+                    }
+                }
+                yield true;
+            }
+            case "if" -> {
+                for (int j = index + 1; j < words.length; j++) {
+                    if (words[j].contains("=>")) {
+                        yield false;
+                    }
+                    if ("then".equals(leadingIdentifier(words[j]))) {
+                        yield true;
+                    }
+                }
+                yield true;
+            }
+            default -> true;
         };
     }
 }
