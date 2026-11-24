@@ -19,7 +19,7 @@ public class Interpreter {
     private final ModuleLoader moduleLoader;
     private final Map<Path, StackFrame> modules = new HashMap<>();
     private final Set<Path> loadingModules = new HashSet<>();
-    private static long executionSteps = 0;
+    private long executionSteps = 0;
 
     private static final int MAX_CALL_DEPTH = 256;
     private static final long MAX_EXECUTION_STEPS = 10_000_000;
@@ -33,14 +33,17 @@ public class Interpreter {
     }
 
     public Object interpret(Node node) {
+        executionSteps = 0;
+        return interpretNode(node);
+    }
+
+    private Object interpretNode(Node node) {
         if (node == null) {
             return null;
         }
-
         if (++executionSteps > MAX_EXECUTION_STEPS) {
             return fail(node, "Maximum execution steps exceeded: " + MAX_EXECUTION_STEPS);
         }
-
         return switch (node) {
             case Expression expr -> interpretExpression(expr);
             case Statement stmt -> interpretStatement(stmt);
@@ -144,7 +147,7 @@ public class Interpreter {
             for (int i = 0; i < params.size(); i++) {
                 currentFrame.setVariable(params.get(i).name(), argCells.get(i));
             }
-            Object result = interpret(body);
+            Object result = interpretNode(body);
             if (result instanceof Signal.ReturnSignal(Cell valueCell, SourceLocation _)) {
                 return new ImmutableCell(valueCell.get(), c.loc());
             }
@@ -536,10 +539,10 @@ public class Interpreter {
         }
 
         if (cond) {
-            return interpret(i.then());
+            return interpretStatement(i.then());
         }
         if (i.otherwise() != null) {
-            return interpret(i.otherwise());
+            return interpretStatement(i.otherwise());
         }
         return null;
     }
@@ -656,7 +659,7 @@ public class Interpreter {
         currentFrame = new StackFrame(previous);
         try {
             for (Statement statement : b.statements()) {
-                Object result = interpret(statement);
+                Object result = interpretStatement(statement);
                 if (result instanceof Signal) {
                     return result;
                 }
@@ -687,7 +690,7 @@ public class Interpreter {
                                 || statement instanceof Statement.Import)) {
                             continue;
                         }
-                        Object result = interpret(statement);
+                        Object result = interpretStatement(statement);
                         if (result instanceof Signal) {
                             return fail(i, "Unexpected control flow in module: " + path);
                         }
@@ -787,7 +790,7 @@ public class Interpreter {
     }
 
     private Cell evaluate(Expression expr) {
-        Object result = interpret(expr);
+        Object result = interpretExpression(expr);
         return (Cell) result;
     }
 
