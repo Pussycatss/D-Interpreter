@@ -1,12 +1,11 @@
 # Architecture
 
-Proposed architecture:
-
 ```
 interpreter/
 │
 ├── Main.java
-├── StackFrame.java
+├── SourceLocation.java
+├── SourceSpan.java
 ├── InterpreterException.java
 │
 ├── lexer/
@@ -23,35 +22,49 @@ interpreter/
 │   ├── AstPrinter.java
 │   ├── Expression.java
 │   ├── Node.java
-│   ├── SourceLocation.java
 │   ├── Statement.java
 │   └── TypeIndicator.java
 │
 ├── semantic/
-│   ├── Optimizer.java
-│   └── Analyzer.java
+│   ├── Analyzer.java
+│   └── Optimizer.java
 │
 ├── error/
 │   ├── DiagnosticError.java
-│   └── ErrorReporter.java
+│   ├── ErrorReporter.java
+│   └── SourceManager.java
 │
 ├── runtime/
 │   ├── Interpreter.java
-│   └── Cell.java
+│   ├── StackFrame.java
+│   ├── Cell.java
+│   ├── ImmutableCell.java
+│   ├── MutableCell.java
+│   ├── FunctionCell.java
+│   ├── ArrayCell.java
+│   ├── TupleCell.java
+│   ├── Signal.java
+│   ├── CallStackFrame.java
+│   ├── InterpretationException.java
+│   ├── ModuleLoader.java
+│   └── ModuleLoadException.java
 │
 └── cli/
     ├── CommandLineArgs.java
     ├── Evaluable.java
     ├── LexerEval.java
-    ├── OptimizerEval.java
     ├── ParserEval.java
+    ├── OptimizerEval.java
+    ├── InterpreterEval.java
+    ├── CliModuleLoader.java
     └── REPL.java
 ```
 
 ### Detailed component description:
-- lexer – Lexical analyzer. Includes token types and keywords registry, tokenizer and scanner. Handles lexical errors.
-- parser – Syntax analyzer. Includes parser and parser errors.
-- semantic – Semantic analyzer. Performs analysis and optimization after parsing and before execution.
-- error – Handler of errors from analyzers. Stores up to 200 errors.
-- ast – Abstract syntax tree. Includes AST. Builds tree from tokens.
-- runtime – Runtime environment. Includes interpreter and cell. Cells proposed to resolve closures in capture-by-reference model.
+- **lexer** – Lexical analyzer. Includes token types and keywords registry, tokenizer and scanner. Handles lexical errors.
+- **parser** – Syntax analyzer. Builds the AST from tokens, recovers from errors via synchronization.
+- **semantic** – `Analyzer` performs semantic checks (declarations, scopes, control-flow context); `Optimizer` rewrites the AST before execution.
+- **error** – Collects `DiagnosticError`s across the pipeline (up to 200), renders source snippets via `SourceManager`.
+- **ast** – Abstract syntax tree nodes (`Expression`, `Statement`, `Node`) plus `AstPrinter` and `TypeIndicator`.
+- **runtime** – Execution engine. `Interpreter` evaluates the AST over `StackFrame`s; values are wrapped in `Cell`s (`Immutable`, `Mutable`, `Function`, `Array`, `Tuple`) implementing capture-by-reference closures. `Signal` carries non-error control flow (`return`, `exit`); `ModuleLoader`/`CliModuleLoader` resolve `import ... from` modules through the full lexer→parser→analyzer→optimizer pipeline.
+- **cli** – Entry point (`Main` → `CommandLineArgs`, picocli). Runs files/`-c` code through the whole pipeline, or drops into `REPL` with per-stage handlers (`LexerEval`, `ParserEval`, `OptimizerEval`, `InterpreterEval`). The interpreter REPL keeps one `Interpreter` and reuses `interpretTopLevel` so declarations persist across inputs; `Analyzer.declareGlobal` seeds the global scope with previously declared names.
